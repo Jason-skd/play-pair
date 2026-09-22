@@ -1,0 +1,279 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{microtype}
+\usepackage[table]{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+\urlstyle{same}
+
+\definecolor{Heading}{HTML}{1F4E5F}
+\definecolor{Accent}{HTML}{DCE9ED}
+\definecolor{Placeholder}{HTML}{9C2F2F}
+\definecolor{Rule}{HTML}{78909C}
+
+\newcommand{\placeholder}[1]{\textcolor{Placeholder}{\textbf{[#1]}}}
+\newcommand{\objective}[1]{\textbf{Objective #1}}
+\newcommand{\sourcecite}[1]{\textsuperscript{[#1]}}
+
+\titleformat{\section}
+  {\normalfont\fontsize{16}{20}\selectfont\bfseries\color{Heading}}
+  {}{0pt}{}
+\titlespacing*{\section}{0pt}{1.2em}{0.55em}
+\titleformat{\subsection}
+  {\normalfont\fontsize{12}{15}\selectfont\bfseries}
+  {}{0pt}{}
+\titlespacing*{\subsection}{0pt}{0.8em}{0.25em}
+
+\setlist[itemize]{leftmargin=1.6em,itemsep=0.25em,topsep=0.35em}
+\setlist[enumerate]{leftmargin=1.8em,itemsep=0.3em,topsep=0.35em}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\setlength{\emergencystretch}{2em}
+\renewcommand{\arraystretch}{1.2}
+\pagestyle{plain}
+
+\begin{document}
+
+\pagenumbering{roman}
+\begin{titlepage}
+  \thispagestyle{empty}
+  \begingroup
+  \singlespacing
+  \renewcommand{\arraystretch}{1.05}
+  \centering
+  \vspace*{0.5cm}
+
+  {\fontsize{16}{20}\selectfont\bfseries JC2001: Introduction to Software Engineering\par}
+  \vspace{0.35cm}
+  {\fontsize{15}{19}\selectfont Group Project Proposal\par}
+
+  \vspace{0.75cm}
+  {\color{Heading}\rule{\textwidth}{1.2pt}\par}
+  \vspace{0.5cm}
+  {\fontsize{24}{30}\selectfont\bfseries PlayPair\par}
+  \vspace{0.25cm}
+  {\fontsize{16}{21}\selectfont An Explainable AI Decision Agent for Planning Group Outings\par}
+  \vspace{0.5cm}
+  {\color{Heading}\rule{\textwidth}{1.2pt}\par}
+
+  \vspace{0.55cm}
+  \begin{tabular}{>{\bfseries}p{0.25\textwidth}p{0.62\textwidth}}
+    Group number: & \placeholder{To be added} \\
+    Programme of study: & \placeholder{BSc (CS), BSc (AI), or BSc (BMIS)} \\
+    Academic supervisor: & \placeholder{To be added} \\
+    Submission date: & 25 September 2026 \\
+  \end{tabular}
+
+  \vspace{0.45cm}
+  {\bfseries Group Members\par}
+  \vspace{0.25cm}
+  \begin{tabularx}{0.9\textwidth}{>{\centering\arraybackslash}p{0.09\textwidth}X X}
+    \toprule
+    \textbf{No.} & \textbf{Student name} & \textbf{Student ID} \\
+    \midrule
+    1  & \placeholder{To be added} & \placeholder{To be added} \\
+    2  & \placeholder{To be added} & \placeholder{To be added} \\
+    3  & \placeholder{To be added} & \placeholder{To be added} \\
+    4  & \placeholder{To be added} & \placeholder{To be added} \\
+    5  & \placeholder{To be added} & \placeholder{To be added} \\
+    6  & \placeholder{To be added} & \placeholder{To be added} \\
+    7  & \placeholder{To be added} & \placeholder{To be added} \\
+    8  & \placeholder{To be added} & \placeholder{To be added} \\
+    9  & \placeholder{To be added} & \placeholder{To be added} \\
+    10 & \placeholder{To be added} & \placeholder{To be added} \\
+    \bottomrule
+  \end{tabularx}
+
+  \vfill
+  {\small South China Normal University\par}
+  {\small Academic Year 2026--27\par}
+  \endgroup
+\end{titlepage}
+
+\pagenumbering{arabic}
+
+\section*{Title}
+
+\textbf{PlayPair: An Explainable AI Decision Agent for Planning Group Outings}
+
+\section*{Problem}
+
+Arranging an outing among friends is a small but recurring coordination problem. A group must identify a time when enough members are available, respect practical restrictions such as budget and accessibility, and select a place and activity that the group will accept. In practice, these inputs are scattered across messages, informal polls and individual suggestions. Hard constraints can be overlooked, quieter members' preferences may receive less attention, and discussion can continue without producing an actionable plan. Existing calendars and polling tools can collect availability, while map and review services can list venues, but these functions do not by themselves reconcile time, constraints and subjective group preferences into one transparent recommendation. The intended users are young people who live in the same city and organise social activities with an existing friendship group. For the proof of concept, the location scope will be limited to places around South China Normal University (SCNU). During the initial project phase, interviews and a short questionnaire will be used to validate the most important coordination difficulties and refine the requirements for the decision experience.
+
+\section*{Solution}
+
+We propose PlayPair, a web-based decision agent that supports a group from initial coordination to a shortlist of three complete outing plans. A user will create an account, create a friendship group or join one with a group code, and enter recent availability, practical constraints and activity preferences. PlayPair will coordinate these inputs and recommend three combinations of time, activity and place. Each recommendation will show why it suits the group, which preferences it satisfies, its important trade-offs and the confidence of the AI judgement. The group can then confirm a proposal or vote among the alternatives.
+
+The proposed solution separates work that software can calculate exactly from work that benefits from AI judgement:
+
+\begin{enumerate}
+  \item \textbf{Deterministic constraint processing.} A Go back end will normalise time data, calculate feasible time windows, enforce the required participation level, and reject candidates that violate budget, accessibility or explicit exclusion rules. Precise calculations such as time comparison, participant counts, price limits and distance will remain in code.
+
+  \item \textbf{Local candidate generation.} The proof of concept will use a curated catalogue of approximately 20--40 activities and venues near SCNU. Entries will contain structured attributes such as category, location, price range, typical opening periods, indoor or outdoor setting, atmosphere and relevant restrictions. The agent will combine feasible time windows with suitable catalogue entries to create complete outing candidates that can be compared consistently.
+
+  \item \textbf{Structured AI decisions.} After infeasible candidates have been removed, the agent will use Jev, TypeSafe AI's System One model, to evaluate focused semantic questions such as whether an activity fits the group's desired atmosphere and whether a candidate is likely to have broad group acceptance. Jev returns typed choices or scores together with probabilities and confidence.\sourcecite{1} These structured outputs can be combined with explicit application logic to rank candidates while retaining the evidence behind the result.
+
+  \item \textbf{Fairness-aware ranking.} The ranking method will consider both overall group satisfaction and the outcome for the least-satisfied member, reducing the risk that a majority repeatedly overrides the same person. The exact formula, weights and confidence threshold will be selected during the experimental stage rather than asserted in advance. The chosen settings and their effect on recommendations will be documented and evaluated.
+
+  \item \textbf{Evidence-grounded explanation.} A generative language model will convert the stored decision evidence into a concise, readable explanation. The explanation will be grounded in the actual availability, satisfied constraints, preference scores, trade-offs and confidence values recorded by the system, allowing users to understand how each proposal was produced.
+\end{enumerate}
+
+PlayPair will be implemented with a Go back end, a web front end and a persistent data store. Go will own the workflow, exact constraints, candidate construction and ranking calculation, while Jev will contribute bounded common-sense judgements over the group's preferences. This division follows TypeSafe AI's published guidance to keep deterministic control in software and compose narrow AI decisions within that workflow.\sourcecite{1} Decision inputs and outputs will be recorded so that recommendations can be tested, explained and compared during evaluation.
+
+\section*{Objectives}
+
+The project intends to achieve the following specific and feasible objectives:
+
+\begin{itemize}
+  \item \objective{1: Validate and specify the coordination problem.} By 12 October 2026, conduct planned user research, identify the most important scheduling and preference conflicts, define the principal use cases, and establish measurable functional and non-functional requirements, subject to supervisor guidance on research ethics.
+
+  \item \objective{2: Deliver an end-to-end Alpha workflow.} By 12 October 2026, implement a demonstrable path in which users can form a group, provide availability and preferences, and receive three complete time--activity--place proposals from a fixed SCNU-area catalogue. No recommended proposal should violate a declared hard constraint.
+
+  \item \objective{3: Implement a robust and explainable decision architecture.} By 2 November 2026, integrate Jev with the Go workflow, combine deterministic constraint processing with structured semantic scoring, retain a full decision record, and present evidence-grounded explanations and confidence-aware voting.
+
+  \item \objective{4: Evaluate decision quality and software quality.} By 23 November 2026, compare the AI-assisted workflow with a rules-based baseline and evaluate constraint compliance, group acceptance, fairness, latency, cost, consistency and explanation fidelity. Complete relevant unit, component, interface, end-to-end and failure-path testing.
+
+  \item \objective{5: Produce a reproducible course submission.} By 14 December 2026, deliver stable proof-of-concept software, installation and usage documentation, a technical report and a 15-minute presentation whose requirements, design, implementation and evaluation evidence are mutually consistent.
+\end{itemize}
+
+\section*{Benefits}
+
+\begin{enumerate}
+  \item \textbf{Lower coordination effort.} PlayPair consolidates availability, restrictions and preferences into one workflow and produces actionable alternatives, reducing repeated discussion across chat messages and separate polling tools.
+
+  \item \textbf{More inclusive group decisions.} Explicit constraints and fairness-aware evaluation make less visible preferences easier to account for. Showing trade-offs also allows users to challenge a result rather than treating it as an unexplained AI answer.
+
+  \item \textbf{Greater trust and user control.} Each proposed outing is accompanied by traceable reasons and confidence information. When model confidence is low, the system presents alternatives and requests a human vote instead of claiming certainty.
+
+  \item \textbf{Practical and reproducible recommendations.} A verified local catalogue reduces the risk of recommending a non-existent, unsuitable or outdated place. It also permits stable demonstrations and controlled comparisons between decision methods.
+
+  \item \textbf{Engineering and research value.} The project demonstrates how exact software rules, a fast structured decision model and a generative explanation model can be composed without assigning all responsibility to one opaque model. The recorded decisions create measurable evidence for the technical report rather than relying only on a visually appealing prototype.
+
+  \item \textbf{A maintainable foundation.} Separating group management, constraint processing, AI judgement, ranking and explanation into clear components will make the system easier to test, maintain and extend as its user needs develop.
+\end{enumerate}
+
+The expected benefits will be tested rather than assumed. Early interviews and questionnaires will refine the requirements, while later task-based evaluation with friendship groups will examine whether the system improves decision speed, acceptance and perceived fairness.
+
+\section*{Timeline}
+
+\begin{longtable}{>{\bfseries}p{0.12\textwidth}p{0.62\textwidth}p{0.17\textwidth}}
+  \toprule
+  Phase & Description & End date \\
+  \midrule
+  \endhead
+  Phase 1 & Confirm project scope and success measures; submit the project proposal; request Jev early access; prepare research instruments and seek supervisor guidance on research ethics. & 25 September 2026 \\
+  \midrule
+  Phase 2 & Complete requirements modelling and the Alpha vertical slice: group joining, availability and preference entry, deterministic filtering, the local venue catalogue and three complete recommendations. & 12 October 2026 \\
+  \midrule
+  Phase 3 & Complete the Beta workflow: persistent data, Jev integration, evidence-grounded explanations, confidence handling, voting, error paths and an initial evaluation harness. & 2 November 2026 \\
+  \midrule
+  Phase 4 & Freeze the feature scope; complete integration, decision-quality experiments, software testing and user evaluation; produce the principal diagrams, tables and results required by the report. & 23 November 2026 \\
+  \midrule
+  Phase 5 & Prepare the release candidate; fix critical defects; freeze demonstration data and deployment; complete the user manual, technical report draft, slides and recorded-presentation plan. & 7 December 2026 \\
+  \midrule
+  Phase 6 & Perform final reproducibility and consistency checks; submit the technical report, proof-of-concept software, user manual, slides and presentation recording. & 14 December 2026 \\
+  \bottomrule
+\end{longtable}
+
+The phase boundaries align with the four scheduled project updates so that each update can report a concrete, verifiable increment rather than only planned activity.
+
+\section*{Action Plan}
+
+The assignment and progress fields below are intentionally left for the group to complete after agreeing individual responsibilities. Deadlines and outputs are proposed project controls and may be adjusted with the supervisor if the agreed project scope changes.
+
+\subsection*{Objective 1: Validate and specify the coordination problem}
+
+\begin{longtable}{@{}p{0.43\textwidth}p{0.17\textwidth}p{0.16\textwidth}p{0.10\textwidth}@{}}
+  \toprule
+  \textbf{Action} & \textbf{Assigned to} & \textbf{Deadline} & \textbf{Progress} \\
+  \midrule
+  \endhead
+  Confirm the problem statement, PoC scope, data boundaries and research-ethics expectations with the academic supervisor. & \placeholder{TBC} & 25 Sep 2026 & \placeholder{TBC} \\
+  \midrule
+  Conduct 6--10 semi-structured interviews and a short questionnaire; analyse recurring coordination problems without collecting unnecessary personal schedule data. & \placeholder{TBC} & 8 Oct 2026 & \placeholder{TBC} \\
+  \midrule
+  Define personas, use cases, functional and non-functional requirements, and start the requirements traceability matrix. & \placeholder{TBC} & 12 Oct 2026 & \placeholder{TBC} \\
+  \bottomrule
+\end{longtable}
+
+\subsection*{Objective 2: Deliver an end-to-end Alpha workflow}
+
+\begin{longtable}{@{}p{0.43\textwidth}p{0.17\textwidth}p{0.16\textwidth}p{0.10\textwidth}@{}}
+  \toprule
+  \textbf{Action} & \textbf{Assigned to} & \textbf{Deadline} & \textbf{Progress} \\
+  \midrule
+  \endhead
+  Design the data model and API contract for accounts, groups, availability, preferences, venues, candidates and decision runs. & \placeholder{TBC} & 30 Sep 2026 & \placeholder{TBC} \\
+  \midrule
+  Build and verify the structured catalogue of 20--40 activities and venues near SCNU, recording source and last-check information. & \placeholder{TBC} & 3 Oct 2026 & \placeholder{TBC} \\
+  \midrule
+  Implement the Go constraint engine for time windows, minimum attendance, budget and explicit exclusions, with automated tests. & \placeholder{TBC} & 7 Oct 2026 & \placeholder{TBC} \\
+  \midrule
+  Implement the responsive front-end flow and integrate it with the API to display three complete outing proposals and their trade-offs. & \placeholder{TBC} & 12 Oct 2026 & \placeholder{TBC} \\
+  \bottomrule
+\end{longtable}
+
+\subsection*{Objective 3: Implement a robust and explainable decision architecture}
+
+\begin{longtable}{@{}p{0.43\textwidth}p{0.17\textwidth}p{0.16\textwidth}p{0.10\textwidth}@{}}
+  \toprule
+  \textbf{Action} & \textbf{Assigned to} & \textbf{Deadline} & \textbf{Progress} \\
+  \midrule
+  \endhead
+  Complete Jev early-access onboarding and implement its structured decision API within the Go recommendation workflow. & \placeholder{TBC} & 19 Oct 2026 & \placeholder{TBC} \\
+  \midrule
+  Define atomic semantic questions, ranking evidence, fairness measures and a versioned experiment configuration. & \placeholder{TBC} & 23 Oct 2026 & \placeholder{TBC} \\
+  \midrule
+  Implement confidence-aware recommendation, group voting and evidence-grounded natural-language explanations. & \placeholder{TBC} & 2 Nov 2026 & \placeholder{TBC} \\
+  \bottomrule
+\end{longtable}
+
+\subsection*{Objective 4: Evaluate decision quality and software quality}
+
+\begin{longtable}{@{}p{0.43\textwidth}p{0.17\textwidth}p{0.16\textwidth}p{0.10\textwidth}@{}}
+  \toprule
+  \textbf{Action} & \textbf{Assigned to} & \textbf{Deadline} & \textbf{Progress} \\
+  \midrule
+  \endhead
+  Implement unit, component, interface, end-to-end, performance and failure-path tests; record reproducible results. & \placeholder{TBC} & 16 Nov 2026 & \placeholder{TBC} \\
+  \midrule
+  Compare the proposed workflow with a rules-based baseline using constraint compliance, acceptance, fairness, latency, cost, consistency and explanation-fidelity measures. & \placeholder{TBC} & 20 Nov 2026 & \placeholder{TBC} \\
+  \midrule
+  Conduct task-based usability evaluation with consenting participants and analyse limitations and improvement opportunities. & \placeholder{TBC} & 23 Nov 2026 & \placeholder{TBC} \\
+  \bottomrule
+\end{longtable}
+
+\subsection*{Objective 5: Produce a reproducible course submission}
+
+\begin{longtable}{@{}p{0.43\textwidth}p{0.17\textwidth}p{0.16\textwidth}p{0.10\textwidth}@{}}
+  \toprule
+  \textbf{Action} & \textbf{Assigned to} & \textbf{Deadline} & \textbf{Progress} \\
+  \midrule
+  \endhead
+  Integrate the technical report, architecture and requirements models, test evidence, references and group workload profile. & \placeholder{TBC} & 7 Dec 2026 & \placeholder{TBC} \\
+  \midrule
+  Complete the 8--12 page user manual, runnable package, dependency instructions and clean-environment installation test. & \placeholder{TBC} & 7 Dec 2026 & \placeholder{TBC} \\
+  \midrule
+  Produce and rehearse the 15-minute presentation, ensuring participation by all members and consistency with the submitted software and report. & \placeholder{TBC} & 11 Dec 2026 & \placeholder{TBC} \\
+  \midrule
+  Perform final quality checks and submit all assessed deliverables. & \placeholder{TBC} & 14 Dec 2026 & \placeholder{TBC} \\
+  \bottomrule
+\end{longtable}
+
+\section*{References}
+
+\begin{enumerate}[label={[\arabic*]},leftmargin=2.2em]
+  \item TypeSafe AI, ``Introduction'' and ``How to build with TypeSafe'', \emph{TypeSafe AI Documentation}, 2026. Available: \href{https://docs.typesafe.ai/}{docs.typesafe.ai}. Accessed: 22 September 2026.
+\end{enumerate}
+
+\end{document}
