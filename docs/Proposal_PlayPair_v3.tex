@@ -1,0 +1,193 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{microtype}
+\usepackage[table]{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+\urlstyle{same}
+
+\definecolor{Heading}{HTML}{1F4E5F}
+\newcommand{\objective}[1]{\textbf{Objective #1}}
+\titleformat{\section}{\normalfont\fontsize{16}{20}\selectfont\bfseries\color{Heading}}{}{0pt}{}
+\titlespacing*{\section}{0pt}{1.0em}{0.45em}
+\titleformat{\subsection}{\normalfont\fontsize{12}{15}\selectfont\bfseries}{}{0pt}{}
+\titlespacing*{\subsection}{0pt}{0.7em}{0.2em}
+\setlist[itemize]{leftmargin=1.5em,itemsep=0.15em,topsep=0.25em}
+\setlist[enumerate]{leftmargin=1.7em,itemsep=0.15em,topsep=0.25em}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+\setlength{\emergencystretch}{2em}
+\renewcommand{\arraystretch}{1.12}
+\setlength{\tabcolsep}{3pt}
+\pagestyle{plain}
+
+\begin{document}
+\pagenumbering{roman}
+\begin{titlepage}
+  \thispagestyle{empty}
+  \begingroup
+  \singlespacing
+  \renewcommand{\arraystretch}{1.05}
+  \centering
+  \vspace*{0.5cm}
+  {\fontsize{16}{20}\selectfont\bfseries JC2001: Introduction to Software Engineering\par}
+  \vspace{0.35cm}
+  {\fontsize{15}{19}\selectfont Group Project Proposal\par}
+  \vspace{0.75cm}
+  {\color{Heading}\rule{\textwidth}{1.2pt}\par}
+  \vspace{0.5cm}
+  {\fontsize{24}{30}\selectfont\bfseries PlayPair\par}
+  \vspace{0.25cm}
+  {\fontsize{16}{21}\selectfont An Explainable AI Decision Agent for Planning Group Outings\par}
+  \vspace{0.5cm}
+  {\color{Heading}\rule{\textwidth}{1.2pt}\par}
+  \vspace{0.55cm}
+  \begin{tabular}{>{\bfseries}p{0.25\textwidth}p{0.62\textwidth}}
+    Group number: & CS10 \\
+    Programme of study: & BSc (CS) \\
+    Supervisor(s): & Jovan, Ferdian \\
+    Submission date: & 25 September 2026 \\
+  \end{tabular}\par
+  \vspace{0.45cm}
+  {\bfseries Group Members\par}
+  \vspace{0.25cm}
+  \begin{tabularx}{0.9\textwidth}{>{\centering\arraybackslash}p{0.09\textwidth}X X}
+    \toprule
+    \textbf{No.} & \textbf{Student name} & \textbf{Student ID} \\
+    \midrule
+    1 & Jincheng Huang & 50106121 \\
+    2 & Zixuan Liang & 50106098 \\
+    3 & Ziqing Liu & 50106104 \\
+    4 & Jingyi Hu & 50106088 \\
+    5 & Baian Chen & 50106103 \\
+    6 & Jinghao Zhang & 50106027 \\
+    7 & Ruixuan Qiu & 50106105 \\
+    8 & Jiayi Zhong & 50106141 \\
+    9 & Hongyi Xie & 50106101 \\
+    10 & Zhihao Chen & 50106120 \\
+    \bottomrule
+  \end{tabularx}
+  \vfill
+  {\small South China Normal University\par}
+  {\small Academic Year 2026--27\par}
+  \endgroup
+\end{titlepage}
+
+\pagenumbering{arabic}
+\section*{Title}
+\textbf{PlayPair: An Explainable AI Decision Agent for Planning Group Outings}
+
+\section*{Problem}
+Planning an outing among friends requires a compatible time, an acceptable activity and place, and respect for practical limits such as budget or accessibility. Availability and preferences are usually scattered across messages and informal polls. This makes it easy to miss a hard constraint or continue discussing options without settling on a plan. Calendar, polling and venue-listing tools address parts of the task, but they do not combine these inputs into a transparent group recommendation. PlayPair targets existing friendship groups of young people in the same city. Its proof of concept focuses on outings near South China Normal University (SCNU). Interviews and a short questionnaire will test which coordination difficulties matter most before the requirements are finalised.
+
+\section*{Solution}
+PlayPair is a web-based decision agent that carries a group from invitation to a confirmed outing. In Alpha, users register and log in; an initiator creates a group and other members join with its code. The initiator creates an outing and invites group members. Invitees accept or decline, and participating members enter availability, hard constraints and soft preferences. The system proposes up to three complete time--activity--place options. The initiator chooses and confirms one option, which then appears in \emph{My Outings}. Invitation response and later attendance are distinct recorded states. Alpha records changes in attendance but does not automatically re-plan after a decline or absence.
+
+\begin{enumerate}
+  \item \textbf{Exact constraints and candidate construction.} The Go back end combines participating members' available times with a fixed, verified catalogue of approximately 20--40 activities and venues near SCNU. It constructs candidates and removes any that breach declared hard constraints, including budget, accessibility and explicit exclusions. It does not calculate each member's travel distance. The system never silently relaxes a hard constraint; if fewer than three feasible options exist, it displays those available, and if none exist, it explains the conflict and asks users to revise their inputs.
+  \item \textbf{Replaceable decision provider.} After filtering, a structured \emph{DecisionProvider} scores every feasible candidate for its fit with participating members' soft preferences. Jev is the intended provider.\textsuperscript{[1]} An ordinary LLM provider uses the same input and output schema as a fallback, and a Mock provider lets the service run without an API key. No provider creates an unverified venue or overrides Go's hard-constraint result. Alpha ranks feasible candidates to favour options satisfying as many participating members as possible, then shows the top three. Exact weights and thresholds will be informed by later experiments.
+  \item \textbf{Traceable recommendations.} The system records the inputs, catalogue version, constraint results, provider scores and final ranking. Each displayed option gives a short explanation of the relevant preferences and trade-offs drawn from that evidence. The initiator retains the final decision in Alpha; no member vote or confidence-triggered vote is required.
+\end{enumerate}
+
+The catalogue is deliberately bounded: Alpha has no map or Places API, no personal-distance calculation, and no LLM web search or free venue recommendation. Beta adds member voting with stored votes and result handling, and separates confirmed outings in \emph{My Outings} into upcoming and historical entries according to the outing date. The exact voting completion rule can be settled during Beta design. Later experiments may compare rules-only, Jev and LLM scoring and investigate ranking policy, confidence and explanation quality; these comparisons are not prerequisites for Alpha.
+
+\section*{Objectives}
+\begin{itemize}
+  \item \objective{1: Validate the problem and specify requirements.} By 12 October 2026, study the target users' coordination needs, define the core use cases and measurable requirements, and review scope and research ethics with the supervisor.
+  \item \objective{2: Deliver the complete Alpha journey.} By 12 October 2026, demonstrate accounts, group-code joining, invitations and responses, member inputs, feasible candidates from the SCNU catalogue, provider scoring, top-three presentation, initiator confirmation and \emph{My Outings}. Every displayed proposal must satisfy the participating members' declared hard constraints.
+  \item \objective{3: Extend and explain decisions.} By 2 November 2026, refine decision records and grounded explanations; add Beta voting and the upcoming/historical \emph{My Outings} views.
+  \item \objective{4: Evaluate and submit the system.} By 23 November 2026, test the workflow, hard-constraint compliance, provider failures and usability; then complete the runnable proof of concept, user manual, report and presentation by 14 December 2026.
+\end{itemize}
+
+\section*{Benefits}
+\begin{itemize}
+  \item \textbf{Less coordination effort.} One shared process replaces scattered messages for invitations, availability, constraints and final confirmation.
+  \item \textbf{Practical options and user control.} The verified local catalogue and exact filtering make proposals reproducible and prevent a model from inventing places or ignoring declared limits. The initiator decides whether a proposal becomes an outing.
+  \item \textbf{Understandable recommendations.} Member preference coverage, recorded scores and concise explanations let the group see why an option was ranked highly and where it involves a trade-off.
+  \item \textbf{Useful engineering evidence.} The replaceable provider and decision record permit repeatable comparisons of scoring approaches and failure handling without tying the core workflow to Jev availability.
+\end{itemize}
+These benefits are hypotheses to evaluate with interviews, task-based usability sessions and recorded system tests, subject to the supervisor's guidance on research ethics.
+
+\section*{Timeline}
+\begin{longtable}{@{}p{0.13\textwidth}p{0.61\textwidth}p{0.18\textwidth}@{}}
+  \toprule
+  \textbf{Phase} & \textbf{Main outcome} & \textbf{End date} \\
+  \midrule
+  \endhead
+  1 & Confirm scope with the supervisor, submit the proposal, prepare user research and request Jev access. & 25 Sep 2026 \\
+  \midrule
+  2 & Complete requirements and Alpha: accounts, group joining, invitations, member inputs, catalogue, filtering, interchangeable scoring, decision records, confirmation and \emph{My Outings}. & 12 Oct 2026 \\
+  \midrule
+  3 & Refine explanations and decision evidence; add Beta voting and date-based outing views. & 2 Nov 2026 \\
+  \midrule
+  4 & Freeze scope; test the integrated system, run decision and usability evaluations, and collect report evidence. & 23 Nov 2026 \\
+  \midrule
+  5 & Fix critical defects and prepare the runnable package, user manual, report draft and presentation. & 7 Dec 2026 \\
+  \midrule
+  6 & Recheck reproducibility and consistency; submit the report, proof of concept, manual, slides and recording. & 14 Dec 2026 \\
+  \bottomrule
+\end{longtable}
+The phase boundaries coincide with the scheduled project updates on 12 October, 2 November, 23 November and 7 December 2026.
+
+\section*{Action Plan}
+The assignments below retain the team's v2 allocation. Progress is a planning snapshot for 25 September 2026 and should be updated by the group as work proceeds.
+
+\begin{longtable}{@{}p{0.37\textwidth}p{0.25\textwidth}p{0.16\textwidth}p{0.14\textwidth}@{}}
+  \toprule
+  \textbf{Action} & \textbf{Assigned to} & \textbf{Deadline} & \textbf{Status} \\
+  \midrule
+  \endhead
+  \multicolumn{4}{@{}l}{\textbf{Objective 1: Requirements}} \\
+  Discuss scope, research ethics and success measures with supervisor. & Jincheng Huang, Ruixuan Qiu & 25 Sep 2026 & In progress \\
+  \midrule
+  Conduct 6--10 interviews and a short questionnaire, subject to ethics guidance. & Jingyi Hu, Hongyi Xie, Jiayi Zhong & 8 Oct 2026 & Not started \\
+  \midrule
+  Define use cases, requirements and traceability to planned tests. & Jingyi Hu, Hongyi Xie, Jiayi Zhong & 12 Oct 2026 & Not started \\
+  \midrule
+  \multicolumn{4}{@{}l}{\textbf{Objective 2: Alpha}} \\
+  Design account, group, invitation, outing, catalogue and decision data contracts. & Jincheng Huang, Baian Chen, Hongyi Xie & 30 Sep 2026 & Not started \\
+  \midrule
+  Build and verify the fixed SCNU catalogue, including source and last-check details. & Baian Chen, Jiayi Zhong & 3 Oct 2026 & Not started \\
+  \midrule
+  Implement and test Go candidate construction and hard-constraint filtering. & Jincheng Huang, Baian Chen & 7 Oct 2026 & Not started \\
+  \midrule
+  Implement the Jev, LLM and Mock scoring providers behind one schema; store inputs, constraint outcomes and scores. & Jincheng Huang, Baian Chen, Ruixuan Qiu & 10 Oct 2026 & Not started \\
+  \midrule
+  Deliver accounts, group-code joining, invitation responses, member inputs, scoring, top three, initiator confirmation and \emph{My Outings}. & Jingyi Hu, Zhihao Chen, Zixuan Liang, Ruixuan Qiu, Ziqing Liu & 12 Oct 2026 & Not started \\
+  \midrule
+  \multicolumn{4}{@{}l}{\textbf{Objective 3: Decision architecture and Beta}} \\
+  Refine decision evidence and ranking explanations; review the fallback behaviour. & Jincheng Huang, Baian Chen, Ruixuan Qiu & 30 Oct 2026 & Not started \\
+  \midrule
+  Add grounded explanations, member voting and upcoming/historical outing views. & Jincheng Huang, Baian Chen, Jingyi Hu, Zhihao Chen & 2 Nov 2026 & Not started \\
+  \midrule
+  \multicolumn{4}{@{}l}{\textbf{Objective 4: Evaluation and submission}} \\
+  Run unit, interface, end-to-end and failure-path tests, including hard-constraint and provider-failure cases. & Baian Chen, Jinghao Zhang & 16 Nov 2026 & Not started \\
+  \midrule
+  Compare feasible-candidate rankings with a rules-only baseline and assess acceptance, latency, cost and explanation fidelity. & Jincheng Huang, Baian Chen & 20 Nov 2026 & Not started \\
+  \midrule
+  Conduct task-based usability evaluation and document limitations. & Jincheng Huang, Baian Chen, Ruixuan Qiu & 23 Nov 2026 & Not started \\
+  \midrule
+  Complete report, models, references and group workload profile. & All members & 7 Dec 2026 & Not started \\
+  \midrule
+  Complete the 8--12 page manual and verify clean installation of the runnable package. & All members & 7 Dec 2026 & Not started \\
+  \midrule
+  Rehearse the 15-minute presentation and check all final submissions. & All members & 14 Dec 2026 & Not started \\
+  \bottomrule
+\end{longtable}
+
+\section*{References}
+\begin{enumerate}[label={[\arabic*]},leftmargin=2.2em]
+  \item TypeSafe AI, ``Introduction'' and ``How to build with TypeSafe'', \emph{TypeSafe AI Documentation}, 2026. Available: \href{https://docs.typesafe.ai/}{docs.typesafe.ai}. Accessed: 22 September 2026.
+\end{enumerate}
+
+\end{document}
