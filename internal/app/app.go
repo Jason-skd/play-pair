@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Jason-skd/play-pair/internal/api"
+	"github.com/Jason-skd/play-pair/internal/auth"
 	"github.com/Jason-skd/play-pair/internal/config"
 	"github.com/Jason-skd/play-pair/internal/db"
 	"github.com/Jason-skd/play-pair/internal/errs"
@@ -38,12 +39,13 @@ func Start(ctx context.Context, c config.Config, logger *slog.Logger) (*App, err
 		return nil, fmt.Errorf("listen HTTP: %w", err)
 	}
 	a := &App{listener: listener, database: database, logger: logger}
+	authService := auth.New(database, time.Now)
 	a.server = &http.Server{Handler: api.New(func(ctx context.Context) error {
 		if !a.ready.Load() {
 			return errs.DependencyUnavailable
 		}
 		return database.Check(ctx)
-	}, c.ReadyTimeout, logger), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
+	}, c.ReadyTimeout, logger, authService, c.AuthCookieSecure), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
 	a.ready.Store(true)
 	go func() {
 		if err := a.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {

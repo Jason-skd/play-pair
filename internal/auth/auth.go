@@ -23,6 +23,7 @@ var (
 	ErrEmailConflict      = errors.New("email conflict")
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUnauthenticated    = errors.New("unauthenticated")
+	ErrNotFound           = errors.New("not found")
 )
 
 type User struct {
@@ -93,9 +94,12 @@ func (s *Service) Login(ctx context.Context, email, password string) (User, stri
 		return User{}, "", time.Time{}, ErrInvalidCredentials
 	}
 	u, err := s.repo.FindByEmail(ctx, email)
-	if err != nil {
+	if errors.Is(err, ErrNotFound) {
 		_ = s.verify(ctx, password, s.dummy())
 		return User{}, "", time.Time{}, ErrInvalidCredentials
+	}
+	if err != nil {
+		return User{}, "", time.Time{}, err
 	}
 	if !s.verify(ctx, password, u.PasswordHash) {
 		return User{}, "", time.Time{}, ErrInvalidCredentials
@@ -117,8 +121,11 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 		return User{}, ErrUnauthenticated
 	}
 	u, err := s.repo.FindSessionUser(ctx, digest, s.now().UTC())
-	if err != nil {
+	if errors.Is(err, ErrNotFound) {
 		return User{}, ErrUnauthenticated
+	}
+	if err != nil {
+		return User{}, err
 	}
 	return u.User, nil
 }

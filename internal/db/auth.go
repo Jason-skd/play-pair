@@ -8,6 +8,7 @@ import (
 
 	"github.com/Jason-skd/play-pair/internal/auth"
 	"github.com/Jason-skd/play-pair/internal/db/generated"
+	"github.com/Jason-skd/play-pair/internal/errs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,7 +17,7 @@ import (
 func (db *DB) Register(ctx context.Context, user auth.StoredUser, tokenHash [32]byte, expiresAt time.Time) error {
 	tx, err := db.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin registration: %w", err)
+		return fmt.Errorf("%w: begin registration", errs.DependencyUnavailable)
 	}
 	defer tx.Rollback(ctx)
 	q := db.queries.WithTx(tx)
@@ -29,21 +30,24 @@ func (db *DB) Register(ctx context.Context, user auth.StoredUser, tokenHash [32]
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return auth.ErrEmailConflict
 		}
-		return fmt.Errorf("create user: %w", err)
+		return fmt.Errorf("%w: create user", errs.DependencyUnavailable)
 	}
 	if err := q.CreateSession(ctx, generated.CreateSessionParams{TokenHash: tokenHash[:], UserID: id, CreatedAt: timestamp(user.CreatedAt), ExpiresAt: timestamp(expiresAt)}); err != nil {
-		return fmt.Errorf("create registration session: %w", err)
+		return fmt.Errorf("%w: create registration session", errs.DependencyUnavailable)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit registration: %w", err)
+		return fmt.Errorf("%w: commit registration", errs.DependencyUnavailable)
 	}
 	return nil
 }
 
 func (db *DB) FindByEmail(ctx context.Context, email string) (auth.StoredUser, error) {
 	u, err := db.queries.FindUserByEmail(ctx, email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return auth.StoredUser{}, auth.ErrNotFound
+	}
 	if err != nil {
-		return auth.StoredUser{}, err
+		return auth.StoredUser{}, fmt.Errorf("%w: find user", errs.DependencyUnavailable)
 	}
 	return storedUser(u.ID, u.Email, u.PasswordHash, u.DisplayName, u.CreatedAt.Time), nil
 }
@@ -53,20 +57,29 @@ func (db *DB) CreateSession(ctx context.Context, userID string, tokenHash [32]by
 	if err != nil {
 		return err
 	}
-	return db.queries.CreateSession(ctx, generated.CreateSessionParams{TokenHash: tokenHash[:], UserID: id, CreatedAt: timestamp(createdAt), ExpiresAt: timestamp(expiresAt)})
+	if err := db.queries.CreateSession(ctx, generated.CreateSessionParams{TokenHash: tokenHash[:], UserID: id, CreatedAt: timestamp(createdAt), ExpiresAt: timestamp(expiresAt)}); err != nil {
+		return fmt.Errorf("%w: create session", errs.DependencyUnavailable)
+	}
+	return nil
 }
 
 func (db *DB) FindSessionUser(ctx context.Context, tokenHash [32]byte, now time.Time) (auth.StoredUser, error) {
 	u, err := db.queries.FindSessionUser(ctx, generated.FindSessionUserParams{TokenHash: tokenHash[:], ExpiresAt: timestamp(now)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return auth.StoredUser{}, auth.ErrNotFound
+	}
 	if err != nil {
-		return auth.StoredUser{}, err
+		return auth.StoredUser{}, fmt.Errorf("%w: find session", errs.DependencyUnavailable)
 	}
 	return storedUser(u.ID, u.Email, u.PasswordHash, u.DisplayName, u.CreatedAt.Time), nil
 }
 
 func (db *DB) DeleteSession(ctx context.Context, tokenHash [32]byte) error {
 	_, err := db.queries.DeleteSession(ctx, tokenHash[:])
-	return err
+	if err != nil {
+		return fmt.Errorf("%w: delete session", errs.DependencyUnavailable)
+	}
+	return nil
 }
 
 func parseUUID(v string) (pgtype.UUID, error) {
@@ -91,4 +104,3 @@ func uuidString(id pgtype.UUID) string {
 }
 
 var _ auth.Repository = (*DB)(nil)
-var _ = pgx.ErrNoRows

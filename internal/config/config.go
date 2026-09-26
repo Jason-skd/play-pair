@@ -10,16 +10,17 @@ import (
 )
 
 type Config struct {
-	HTTPAddr        string
-	DatabaseURL     string
-	DBMaxConns      int32
-	StartupTimeout  time.Duration
-	ReadyTimeout    time.Duration
-	ShutdownTimeout time.Duration
+	HTTPAddr         string
+	DatabaseURL      string
+	DBMaxConns       int32
+	StartupTimeout   time.Duration
+	ReadyTimeout     time.Duration
+	ShutdownTimeout  time.Duration
+	AuthCookieSecure bool
 }
 
 func Load(getenv func(string) string) (Config, error) {
-	c := Config{HTTPAddr: ":8080", DBMaxConns: 4, StartupTimeout: 5 * time.Second, ReadyTimeout: time.Second, ShutdownTimeout: 10 * time.Second}
+	c := Config{HTTPAddr: ":8080", DBMaxConns: 4, StartupTimeout: 5 * time.Second, ReadyTimeout: time.Second, ShutdownTimeout: 10 * time.Second, AuthCookieSecure: true}
 	if v := getenv("HTTP_ADDR"); v != "" {
 		c.HTTPAddr = v
 	}
@@ -51,6 +52,13 @@ func Load(getenv func(string) string) (Config, error) {
 			}
 			*dst = d
 		}
+	}
+	if v := getenv("AUTH_COOKIE_SECURE"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("AUTH_COOKIE_SECURE: expected boolean")
+		}
+		c.AuthCookieSecure = b
 	}
 	return c, nil
 }

@@ -28,7 +28,7 @@ func (m *memoryRepo) Register(_ context.Context, u StoredUser, h [32]byte, exp t
 func (m *memoryRepo) FindByEmail(_ context.Context, e string) (StoredUser, error) {
 	u, ok := m.users[e]
 	if !ok {
-		return StoredUser{}, errors.New("missing")
+		return StoredUser{}, ErrNotFound
 	}
 	return u, nil
 }
@@ -45,7 +45,7 @@ func (m *memoryRepo) CreateSession(_ context.Context, id string, h [32]byte, _ t
 func (m *memoryRepo) FindSessionUser(_ context.Context, h [32]byte, now time.Time) (StoredUser, error) {
 	u, ok := m.sessions[h]
 	if !ok || !m.expires[h].After(now) {
-		return StoredUser{}, errors.New("missing")
+		return StoredUser{}, ErrNotFound
 	}
 	return u, nil
 }
