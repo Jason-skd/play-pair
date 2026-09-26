@@ -6,8 +6,8 @@ import (
 )
 
 type limitEntry struct {
-	start time.Time
-	count int
+	expiresAt time.Time
+	count     int
 }
 type limiter struct {
 	mu      sync.Mutex
@@ -25,7 +25,7 @@ func (l *limiter) allow(key string, window time.Duration, limit int) (bool, time
 	defer l.mu.Unlock()
 	now := l.now()
 	for k, e := range l.entries {
-		if now.Sub(e.start) >= window {
+		if !now.Before(e.expiresAt) {
 			delete(l.entries, k)
 		}
 	}
@@ -34,11 +34,11 @@ func (l *limiter) allow(key string, window time.Duration, limit int) (bool, time
 		if len(l.entries) >= l.max {
 			return false, window
 		}
-		l.entries[key] = limitEntry{start: now, count: 1}
+		l.entries[key] = limitEntry{expiresAt: now.Add(window), count: 1}
 		return true, 0
 	}
 	if e.count >= limit {
-		return false, window - now.Sub(e.start)
+		return false, e.expiresAt.Sub(now)
 	}
 	e.count++
 	l.entries[key] = e

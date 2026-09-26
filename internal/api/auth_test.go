@@ -187,6 +187,27 @@ func TestLoginRateLimit(t *testing.T) {
 	}
 }
 
+func TestLoginRateLimitNormalizesEmail(t *testing.T) {
+	r := New(nil, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), auth.New(newAuthRepo(), time.Now), false)
+	for i := 0; i <= loginEmailLimit; i++ {
+		body := `{"email":"same@example.com","password":"correct horse battery"}`
+		if i%2 == 0 {
+			body = `{"email":" SAME@EXAMPLE.COM ","password":"correct horse battery"}`
+		}
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-PlayPair-Request", "1")
+		r.ServeHTTP(w, req)
+		if i < loginEmailLimit && w.Code != 401 {
+			t.Fatalf("attempt %d: %d", i, w.Code)
+		}
+		if i == loginEmailLimit && (w.Code != 429 || w.Header().Get("Retry-After") != "900") {
+			t.Fatalf("limit: %d retry=%q", w.Code, w.Header().Get("Retry-After"))
+		}
+	}
+}
+
 func TestMeAuthenticationBoundary(t *testing.T) {
 	now := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {

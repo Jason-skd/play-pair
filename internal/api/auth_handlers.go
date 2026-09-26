@@ -14,6 +14,14 @@ import (
 
 const sessionCookie = "playpair_session"
 
+const (
+	registerIPLimit = 5
+	registerWindow  = time.Hour
+	loginIPLimit    = 30
+	loginEmailLimit = 10
+	loginWindow     = 15 * time.Minute
+)
+
 func (s *server) Register(c *gin.Context, params generated.RegisterParams) {
 	if string(params.XPlayPairRequest) != "1" {
 		writeError(c, 400, generated.CsrfRejected, "Invalid browser request")
@@ -23,7 +31,7 @@ func (s *server) Register(c *gin.Context, params generated.RegisterParams) {
 	if !decodeJSON(c, &body) {
 		return
 	}
-	if !s.allow(c, "register:ip:"+c.ClientIP(), time.Hour, 5) {
+	if !s.allow(c, "register:ip:"+c.ClientIP(), registerWindow, registerIPLimit) {
 		return
 	}
 	u, token, expires, err := s.auth.Register(c.Request.Context(), body.Email, body.Password, body.DisplayName)
@@ -45,7 +53,7 @@ func (s *server) Login(c *gin.Context, params generated.LoginParams) {
 	if !decodeJSON(c, &body) {
 		return
 	}
-	if !s.allow(c, "login:ip:"+c.ClientIP(), 15*time.Minute, 30) || !s.allow(c, "login:email:"+strings.ToLower(strings.TrimSpace(body.Email)), 15*time.Minute, 10) {
+	if !s.allow(c, "login:ip:"+c.ClientIP(), loginWindow, loginIPLimit) || !s.allow(c, "login:email:"+strings.ToLower(strings.TrimSpace(body.Email)), loginWindow, loginEmailLimit) {
 		return
 	}
 	u, token, expires, err := s.auth.Login(c.Request.Context(), body.Email, body.Password)
@@ -78,7 +86,7 @@ func (s *server) allow(c *gin.Context, key string, window time.Duration, limit i
 	if ok {
 		return true
 	}
-	c.Header("Retry-After", strconv.Itoa(max(1, int(retry.Round(time.Second)/time.Second))))
+	c.Header("Retry-After", strconv.Itoa(max(1, int((retry+time.Second-1)/time.Second))))
 	writeError(c, 429, generated.RateLimited, "Too many requests")
 	return false
 }
