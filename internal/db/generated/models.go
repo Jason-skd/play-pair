@@ -3,3 +3,22 @@
 //   sqlc v1.31.1
 
 package generated
+
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type Session struct {
+	TokenHash []byte
+	UserID    pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+}
+
+type User struct {
+	ID           pgtype.UUID
+	Email        string
+	PasswordHash string
+	DisplayName  string
+	CreatedAt    pgtype.Timestamptz
+}
