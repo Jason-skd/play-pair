@@ -88,4 +88,7 @@ Temporary Items
 .history
 .ionide
 
+# Repository-local tool binaries installed by Make targets.
+.tools/
+
 # End of https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode

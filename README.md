@@ -2,20 +2,59 @@
 
 面向已有朋友圈，综合成员时间、硬性约束和软偏好，生成群体聚会方案的 AI 辅助决策系统。
 
-> [!NOTE]
-> 项目目前处于方案阶段。
-
 ## 常用指令
 
-待补充。
+需要 Go 1.27.1、Docker Compose、Make。启动本地 PostgreSQL、执行迁移并运行 API：
+
+```sh
+make db-up
+make migrate-up
+make run
+```
+
+默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端用 `curl http://127.0.0.1:8080/healthz` 检查进程，用 `curl http://127.0.0.1:8080/readyz` 检查数据库可用性。按 `Ctrl-C` 关闭服务；`make db-down` 停止数据库并保留数据卷。目前只有工程底座和探针，没有业务接口。
+
+配置来自环境变量：`DATABASE_URL`（直接运行二进制时必需）、`HTTP_ADDR`（默认 `:8080`）、`DB_MAX_CONNS`（`4`）、`STARTUP_TIMEOUT`（`5s`）、`READY_TIMEOUT`（`1s`）、`SHUTDOWN_TIMEOUT`（`10s`）。`make run` 和 `make migrate-up` 使用 `DB_URL`，未设置时连接本地开发库。API 启动不会自动运行迁移。
+
+检查与生成：
+
+```sh
+make check
+make generate
+```
+
+`make check` 将固定版本工具安装到忽略的 `.tools/bin/`，运行格式、vet、构建、单元测试和生成一致性检查。修改 OpenAPI、migration 或 SQL 查询后运行 `make generate`，并审查生成差异。
+
+集成测试使用单独的测试库，先执行 `docker compose exec -T postgres createdb -U playpair playpair_test`，再运行：
+
+```sh
+export TEST_DATABASE_URL='postgres://playpair:playpair_dev@127.0.0.1:55432/playpair_test?sslmode=disable'
+make test-integration
+go test -race ./...
+make test-smoke
+```
+
+测试库已有时只需设置连接串；集成测试缺少连接串会失败。`make test-smoke` 构建并启动真实进程，检查 readiness 后发送 `SIGTERM`。
 
 ## 项目架构
 
-待补充。
+这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。当前只有探针请求；业务用例尚未接入。
+
+| 位置 | 职责 |
+| --- | --- |
+| `cmd/playpair-api/` | 进程入口、信号处理和退出状态 |
+| `internal/app/` | 装配 HTTP 与数据库、管理启动和有界关闭 |
+| `internal/api/` | Gin 路由、探针、request ID 和 HTTP 错误映射 |
+| `internal/config/` | 启动时解析并校验环境配置 |
+| `internal/db/` | PostgreSQL 连接池、健康查询和 sqlc 生成代码 |
+| `api/`、`db/` | HTTP 契约、迁移和 SQL 查询的源文件 |
+
+`Makefile` 是本地命令入口，`.github/workflows/backend.yml` 执行相同的基础与数据库检查。后续业务包按实施计划直接放在 `internal/` 下，由 `internal/app` 装配；生成类型不进入业务逻辑。
 
 ## 文档索引
 
 - [实施计划](docs/implementation_plan.md)
+- [后端底座设计记录](docs/design/backend-foundation.md)
 - Proposal 文档
   - [Proposal v1 源文件](docs/proposal/Proposal_PlayPair_v1.tex)（[PDF](docs/proposal/Proposal_PlayPair_v1.pdf)）
   - [Proposal v2 历史稿](docs/proposal/Proposal_PlayPair_v2.docx)
@@ -38,4 +77,4 @@
 
 ## 权威来源
 
-待补充。
+HTTP 契约以 `api/openapi.yaml` 为权威来源；数据库 schema 以 `db/migrations/`、查询以 `db/queries/` 为权威来源。`internal/api/generated/` 和 `internal/db/generated/` 都是生成代码，不得手工修改。
