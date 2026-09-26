@@ -3,19 +3,20 @@
 面向已有朋友圈，综合成员时间、硬性约束和软偏好，生成群体聚会方案的 AI 辅助决策系统。
 
 > [!NOTE]
-> 项目目前处于方案阶段。
+> 项目后端骨架正在按 Issue #3 建立；业务功能尚未实现。
 
 ## 常用指令
 
-待补充。
+当前已建立 Go module、配置与 HTTP 探针。完整的启动和检查命令在数据库与 CI 单元完成后补齐。
 
 ## 项目架构
 
-待补充。
+当前 `internal/api` 承担 Gin 协议与错误映射，`internal/config` 承担进程配置。后续 `internal/app` 负责装配与生命周期，`internal/db` 负责 PostgreSQL 边界。
 
 ## 文档索引
 
 - [实施计划](docs/implementation_plan.md)
+- [后端底座设计记录](docs/design/backend-foundation.md)
 - Proposal 文档
   - [Proposal v1 源文件](docs/proposal/Proposal_PlayPair_v1.tex)（[PDF](docs/proposal/Proposal_PlayPair_v1.pdf)）
   - [Proposal v2 历史稿](docs/proposal/Proposal_PlayPair_v2.docx)
@@ -38,4 +39,4 @@
 
 ## 权威来源
 
-待补充。
+HTTP 契约以 `api/openapi.yaml` 为权威来源；生成绑定位于 `internal/api/generated/`，不得手工修改。数据库 schema 和查询权威源随数据库单元建立。
