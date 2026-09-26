@@ -2,12 +2,9 @@
 
 面向已有朋友圈，综合成员时间、硬性约束和软偏好，生成群体聚会方案的 AI 辅助决策系统。
 
-> [!NOTE]
-> 当前仅有后端工程底座；业务功能尚未实现。
-
 ## 常用指令
 
-需要 Go 1.27.1、Docker Compose、Make。运行本地服务：
+需要 Go 1.27.1、Docker Compose、Make。启动本地 PostgreSQL、执行迁移并运行 API：
 
 ```sh
 make db-up
@@ -15,9 +12,9 @@ make migrate-up
 make run
 ```
 
-默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端访问 `curl http://127.0.0.1:8080/healthz` 和 `/readyz`。按 `Ctrl-C` 有界关闭。`make db-down` 停止数据库并保留数据卷。
+默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端用 `curl http://127.0.0.1:8080/healthz` 检查进程，用 `curl http://127.0.0.1:8080/readyz` 检查数据库可用性。按 `Ctrl-C` 关闭服务；`make db-down` 停止数据库并保留数据卷。目前只有工程底座和探针，没有业务接口。
 
-配置来自环境变量：`DATABASE_URL`（必需，`make run` 用本地默认值）、`HTTP_ADDR`（`:8080`）、`DB_MAX_CONNS`（`4`）、`STARTUP_TIMEOUT`（`5s`）、`READY_TIMEOUT`（`1s`）、`SHUTDOWN_TIMEOUT`（`10s`）。API 启动不会运行迁移。
+配置来自环境变量：`DATABASE_URL`（直接运行二进制时必需）、`HTTP_ADDR`（默认 `:8080`）、`DB_MAX_CONNS`（`4`）、`STARTUP_TIMEOUT`（`5s`）、`READY_TIMEOUT`（`1s`）、`SHUTDOWN_TIMEOUT`（`10s`）。`make run` 和 `make migrate-up` 使用 `DB_URL`，未设置时连接本地开发库。API 启动不会自动运行迁移。
 
 检查与生成：
 
@@ -26,7 +23,7 @@ make check
 make generate
 ```
 
-`make check` 安装固定版本工具到忽略的 `.tools/bin/`，运行格式、vet、构建、单元测试和生成一致性检查。`make generate` 只在修改 OpenAPI、migration 或 SQL 查询后运行，并审查生成差异。
+`make check` 将固定版本工具安装到忽略的 `.tools/bin/`，运行格式、vet、构建、单元测试和生成一致性检查。修改 OpenAPI、migration 或 SQL 查询后运行 `make generate`，并审查生成差异。
 
 集成测试使用单独的测试库，先执行 `docker compose exec -T postgres createdb -U playpair playpair_test`，再运行：
 
@@ -41,7 +38,18 @@ make test-smoke
 
 ## 项目架构
 
-`cmd/playpair-api` 负责进程信号；`internal/app` 负责装配与生命周期；`internal/api` 承担 Gin 协议与错误映射；`internal/config` 承担进程配置；`internal/db` 负责 PostgreSQL/sqlc 边界。
+这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。当前只有探针请求；业务用例尚未接入。
+
+| 位置 | 职责 |
+| --- | --- |
+| `cmd/playpair-api/` | 进程入口、信号处理和退出状态 |
+| `internal/app/` | 装配 HTTP 与数据库、管理启动和有界关闭 |
+| `internal/api/` | Gin 路由、探针、request ID 和 HTTP 错误映射 |
+| `internal/config/` | 启动时解析并校验环境配置 |
+| `internal/db/` | PostgreSQL 连接池、健康查询和 sqlc 生成代码 |
+| `api/`、`db/` | HTTP 契约、迁移和 SQL 查询的源文件 |
+
+`Makefile` 是本地命令入口，`.github/workflows/backend.yml` 执行相同的基础与数据库检查。后续业务包按实施计划直接放在 `internal/` 下，由 `internal/app` 装配；生成类型不进入业务逻辑。
 
 ## 文档索引
 
