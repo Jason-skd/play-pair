@@ -40,21 +40,20 @@ make test-smoke
 
 这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。当前只有探针请求；业务用例尚未接入。
 
-| 位置 | 职责 |
-| --- | --- |
-| `cmd/playpair-api/` | 进程入口、信号处理和退出状态 |
-| `internal/app/` | 装配 HTTP 与数据库、管理启动和有界关闭 |
-| `internal/api/` | Gin 路由、探针、request ID 和 HTTP 错误映射 |
-| `internal/config/` | 启动时解析并校验环境配置 |
-| `internal/db/` | PostgreSQL 连接池、健康查询和 sqlc 生成代码 |
-| `api/`、`db/` | HTTP 契约、迁移和 SQL 查询的源文件 |
+| 位置                | 职责                                        |
+| ------------------- | ------------------------------------------- |
+| `cmd/playpair-api/` | 进程入口、信号处理和退出状态                |
+| `internal/app/`     | 装配 HTTP 与数据库、管理启动和有界关闭      |
+| `internal/api/`     | Gin 路由、探针、request ID 和 HTTP 错误映射 |
+| `internal/config/`  | 启动时解析并校验环境配置                    |
+| `internal/db/`      | PostgreSQL 连接池、健康查询和 sqlc 生成代码 |
+| `api/`、`db/`       | HTTP 契约、迁移和 SQL 查询的源文件          |
 
 `Makefile` 是本地命令入口，`.github/workflows/backend.yml` 执行相同的基础与数据库检查。后续业务包按实施计划直接放在 `internal/` 下，由 `internal/app` 装配；生成类型不进入业务逻辑。
 
 ## 文档索引
 
 - [实施计划](docs/implementation_plan.md)
-- [后端底座设计记录](docs/design/backend-foundation.md)
 - Proposal 文档
   - [Proposal v1 源文件](docs/proposal/Proposal_PlayPair_v1.tex)（[PDF](docs/proposal/Proposal_PlayPair_v1.pdf)）
   - [Proposal v2 历史稿](docs/proposal/Proposal_PlayPair_v2.docx)
