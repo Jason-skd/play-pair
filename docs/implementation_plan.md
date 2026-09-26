@@ -6,7 +6,7 @@
 
 Proposal v4 是产品范围和用户可见行为的上位来源；本文把其中的行为转换为后端模块、数据、接口、事务和验证任务。本文中的“建议”表示后端落地所需、但 Proposal v4 没有唯一规定的技术选择；在开始对应实现前必须确认这些选择。
 
-当前仓库事实：截至本计划编写时，仓库没有后端源代码、数据库迁移或 API 契约。下面是目标设计，不代表已有实现。
+当前仓库已经建立 Go 服务、数据库迁移、OpenAPI 契约和生成检查。下面描述完整后端目标；具体完成状态以当前代码、测试和 Issue 为准。
 
 ## 2. 后端目标与边界
 
@@ -94,7 +94,7 @@ internal/app (composition root) -> all concrete adapters and feature services
 | schema 变更 | goose CLI/tool + 版本化 SQL migrations | goose 负责迁移，不作为业务层 repository 依赖；先写 migration，再根据最终 schema/查询运行 sqlc；生成代码不手工编辑 |
 | 时间 | 写请求带 IANA 时区名和本地相对时间；逻辑层解析为 UTC 瞬时点；数据库只保存瞬时点；GET 带客户端时区用于响应转换 | 用户界面不展示时区设置；数据库不保存 outing 固定时区 |
 
-HTTP 契约采用 `api/openapi.yaml` 作为唯一公共权威源；生成的 transport types/server binding 只能通过生成命令更新，feature 包仍使用自己的 application command/result。认证方式、API 版本前缀和本地测试数据库运行方式尚未由 Proposal 或本次讨论决定；它们在实现对应边界前形成小型设计记录，不另造第二份 HTTP schema。
+HTTP 契约采用 `api/openapi.yaml` 作为唯一公共权威源；生成的 transport types/server binding 只能通过生成命令更新，feature 包仍使用自己的 application command/result。认证采用同源服务端 Cookie Session，API 使用 `/api/v1` 前缀；本地集成测试使用独立 PostgreSQL 测试库，不另造第二份 HTTP schema。
 
 ### 3.3 时间与时区契约
 
@@ -412,7 +412,7 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 
 **排序投票的聚合算法。** 已确定成员可以提交排序选票、发起人参与、非所有成员必须投票、发起人可以提前关闭投票、平票交给 AI 辅助且最终由发起人确认。仍需选择名次积分（如 Borda）或即时决选等聚合方法，因为它们可能对同一组选票产生不同赢家。后端会保存原始排序，避免只能看到聚合结果。
 
-**认证会话形态。** Proposal 没有规定前端与 API 是否同源。若采用浏览器 session cookie，服务端需要 cookie 属性、CSRF 和登录限流；若采用 bearer token，则需要前端保存、刷新、撤销和跨域策略。这个选择会改变 HTTP middleware 和部署配置，但不应渗透到 feature domain。默认推荐同源浏览器场景使用 HttpOnly/Secure session cookie；若前端最终独立部署，再根据真实跨域拓扑确认 CORS/CSRF 方案。
+**认证会话形态（已确定）。** 首版通过统一对外 origin 提供网页和 `/api`，使用服务端 Cookie Session。Cookie 使用 HttpOnly、Secure 和 SameSite 防护，会话固定七天并可由退出撤销；写请求执行跨源检查和自定义请求头校验，登录与注册限流。认证机制只存在于 API/认证 adapter，不渗透到 feature domain。
 
 ### 11.3 可按工程默认值处理的事项
 
