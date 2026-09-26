@@ -3,11 +3,41 @@
 面向已有朋友圈，综合成员时间、硬性约束和软偏好，生成群体聚会方案的 AI 辅助决策系统。
 
 > [!NOTE]
-> 项目后端骨架正在按 Issue #3 建立；业务功能尚未实现。
+> 当前仅有后端工程底座；业务功能尚未实现。
 
 ## 常用指令
 
-当前已建立 Go module、配置、HTTP 探针和 PostgreSQL 连接。完整的启动和检查命令在自动化检查单元补齐。
+需要 Go 1.27.1、Docker Compose、Make。运行本地服务：
+
+```sh
+make db-up
+make migrate-up
+make run
+```
+
+默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端访问 `curl http://127.0.0.1:8080/healthz` 和 `/readyz`。按 `Ctrl-C` 有界关闭。`make db-down` 停止数据库并保留数据卷。
+
+配置来自环境变量：`DATABASE_URL`（必需，`make run` 用本地默认值）、`HTTP_ADDR`（`:8080`）、`DB_MAX_CONNS`（`4`）、`STARTUP_TIMEOUT`（`5s`）、`READY_TIMEOUT`（`1s`）、`SHUTDOWN_TIMEOUT`（`10s`）。API 启动不会运行迁移。
+
+检查与生成：
+
+```sh
+make check
+make generate
+```
+
+`make check` 安装固定版本工具到忽略的 `.tools/bin/`，运行格式、vet、构建、单元测试和生成一致性检查。`make generate` 只在修改 OpenAPI、migration 或 SQL 查询后运行，并审查生成差异。
+
+集成测试使用单独的测试库，先执行 `docker compose exec -T postgres createdb -U playpair playpair_test`，再运行：
+
+```sh
+export TEST_DATABASE_URL='postgres://playpair:playpair_dev@127.0.0.1:55432/playpair_test?sslmode=disable'
+make test-integration
+go test -race ./...
+make test-smoke
+```
+
+测试库已有时只需设置连接串；集成测试缺少连接串会失败。`make test-smoke` 构建并启动真实进程，检查 readiness 后发送 `SIGTERM`。
 
 ## 项目架构
 

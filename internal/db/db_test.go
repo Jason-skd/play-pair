@@ -13,6 +13,9 @@ import (
 func TestRealDatabase(t *testing.T) {
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
+		if os.Getenv("PLAYPAIR_INTEGRATION") == "1" {
+			t.Fatal("TEST_DATABASE_URL is required")
+		}
 		t.Skip("set TEST_DATABASE_URL for integration tests")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

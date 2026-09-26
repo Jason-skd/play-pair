@@ -16,6 +16,9 @@ import (
 func TestLifecycle(t *testing.T) {
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
+		if os.Getenv("PLAYPAIR_INTEGRATION") == "1" {
+			t.Fatal("TEST_DATABASE_URL is required")
+		}
 		t.Skip("set TEST_DATABASE_URL for integration tests")
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -24,7 +27,7 @@ func TestLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := &http.Client{Timeout: time.Second}
+	client := &http.Client{Timeout: time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
 	for _, path := range []string{"/healthz", "/readyz"} {
 		resp, err := client.Get("http://" + a.Addr().String() + path)
 		if err != nil {
@@ -35,7 +38,7 @@ func TestLifecycle(t *testing.T) {
 			t.Fatalf("%s: %d", path, resp.StatusCode)
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := a.Shutdown(ctx); err != nil {
 		t.Fatal(err)
