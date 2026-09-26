@@ -30,8 +30,14 @@ func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, authServ
 	r.Use(requestMiddleware(logger))
 	r.NoRoute(func(c *gin.Context) { writeError(c, 404, generated.NotFound, "Not found") })
 	r.NoMethod(func(c *gin.Context) { writeError(c, 405, generated.MethodNotAllowed, "Method not allowed") })
-	generated.RegisterHandlersWithOptions(r, s, generated.GinServerOptions{Middlewares: []generated.MiddlewareFunc{crossOriginProtection()}, ErrorHandler: func(c *gin.Context, _ error, status int) {
+	wrapper := generated.ServerInterfaceWrapper{Handler: s, HandlerMiddlewares: []generated.MiddlewareFunc{crossOriginProtection()}, ErrorHandler: func(c *gin.Context, _ error, status int) {
 		writeError(c, status, generated.InvalidInput, "Invalid request")
-	}})
+	}}
+	r.POST("/api/v1/auth/register", wrapper.Register)
+	r.POST("/api/v1/auth/login", wrapper.Login)
+	r.POST("/api/v1/auth/logout", wrapper.Logout)
+	r.GET("/api/v1/me", s.requireUser(), wrapper.Me)
+	r.GET("/healthz", wrapper.Health)
+	r.GET("/readyz", wrapper.Ready)
 	return r
 }

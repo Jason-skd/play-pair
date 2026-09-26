@@ -8,11 +8,17 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Jason-skd/play-pair/internal/errs"
 	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v3"
 )
 
 func TestRouter(t *testing.T) {
@@ -84,3 +90,32 @@ func TestReadyCancellation(t *testing.T) {
 }
 
 var _ *gin.Engine = New(func(context.Context) error { return nil }, time.Second, slog.Default(), nil, false)
+
+func TestRoutesMatchOpenAPI(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec struct {
+		Paths map[string]map[string]any `yaml:"paths"`
+	}
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		t.Fatal(err)
+	}
+	var want []string
+	for path, operations := range spec.Paths {
+		for method := range operations {
+			want = append(want, method+" "+path)
+		}
+	}
+	r := New(nil, time.Second, slog.Default(), nil, true)
+	var got []string
+	for _, route := range r.Routes() {
+		got = append(got, strings.ToLower(route.Method)+" "+route.Path)
+	}
+	sort.Strings(want)
+	sort.Strings(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("routes=%v\nOpenAPI=%v", got, want)
+	}
+}

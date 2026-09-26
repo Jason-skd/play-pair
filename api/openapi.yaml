@@ -40,6 +40,8 @@ paths:
   /api/v1/me:
     get:
       operationId: me
+      security:
+        - CookieSession: []
       responses:
         '200': {$ref: '#/components/responses/UserResponse'}
         default: {$ref: '#/components/responses/Error'}
@@ -62,6 +64,11 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 components:
+  securitySchemes:
+    CookieSession:
+      type: apiKey
+      in: cookie
+      name: playpair_session
   parameters:
     BrowserWriteHeader:
       name: X-PlayPair-Request

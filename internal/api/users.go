@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/Jason-skd/play-pair/internal/api/generated"
@@ -11,10 +12,9 @@ import (
 )
 
 func (s *server) Me(c *gin.Context) {
-	token, _ := c.Cookie(sessionCookie)
-	u, err := s.auth.Authenticate(c.Request.Context(), token)
-	if err != nil {
-		s.authFailure(c, err)
+	u, ok := authenticatedUser(c.Request.Context())
+	if !ok {
+		s.failure(c, errors.New("authenticated user missing from request context"))
 		return
 	}
 	c.Header("Cache-Control", "no-store")

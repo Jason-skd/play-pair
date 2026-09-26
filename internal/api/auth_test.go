@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/Jason-skd/play-pair/internal/auth"
+	"github.com/Jason-skd/play-pair/internal/errs"
+	"github.com/gin-gonic/gin"
 )
 
 type authRepo struct {
@@ -23,6 +25,8 @@ type authRepo struct {
 	users    map[string]auth.PasswordCredential
 	sessions map[[32]byte]auth.User
 	expires  map[[32]byte]time.Time
+	lookups  int
+	findErr  error
 }
 
 func newAuthRepo() *authRepo {
@@ -63,6 +67,10 @@ func (r *authRepo) CreateSession(_ context.Context, id string, h [32]byte, _ tim
 func (r *authRepo) FindSessionUser(_ context.Context, h [32]byte, now time.Time) (auth.User, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.lookups++
+	if r.findErr != nil {
+		return auth.User{}, r.findErr
+	}
 	u, ok := r.sessions[h]
 	if !ok || !r.expires[h].After(now) {
 		return auth.User{}, auth.ErrNotFound
@@ -176,6 +184,78 @@ func TestLoginRateLimit(t *testing.T) {
 			t.Fatalf("rate limit: %d %q", resp.StatusCode, resp.Header.Get("Retry-After"))
 		}
 		resp.Body.Close()
+	}
+}
+
+func TestMeAuthenticationBoundary(t *testing.T) {
+	now := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name, cookie            string
+		expires                 time.Duration
+		revoked                 bool
+		findErr                 error
+		wantStatus, wantLookups int
+		wantCode                string
+	}{
+		{"valid", "valid", time.Hour, false, nil, 200, 1, ""},
+		{"missing", "", time.Hour, false, nil, 401, 0, "unauthenticated"},
+		{"malformed", "malformed", time.Hour, false, nil, 401, 0, "unauthenticated"},
+		{"expired", "valid", 0, false, nil, 401, 1, "unauthenticated"},
+		{"revoked", "valid", time.Hour, true, nil, 401, 1, "unauthenticated"},
+		{"dependency", "valid", time.Hour, false, errs.DependencyUnavailable, 503, 1, "dependency_unavailable"},
+		{"internal", "valid", time.Hour, false, errors.New("secret"), 500, 1, "internal_error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newAuthRepo()
+			service := auth.New(repo, func() time.Time { return now })
+			user, token, _, err := service.Register(context.Background(), "user@example.com", "correct horse battery", "User")
+			if err != nil {
+				t.Fatal(err)
+			}
+			digest := [32]byte{}
+			for hash := range repo.sessions {
+				digest = hash
+			}
+			repo.expires[digest] = now.Add(tc.expires)
+			if tc.revoked {
+				delete(repo.sessions, digest)
+			}
+			repo.findErr = tc.findErr
+			var logs bytes.Buffer
+			router := New(func(context.Context) error { return nil }, time.Second, slog.New(slog.NewTextHandler(&logs, nil)), service, true)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+			if tc.cookie != "" {
+				if tc.cookie != "malformed" {
+					tc.cookie = token
+				}
+				req.AddCookie(&http.Cookie{Name: sessionCookie, Value: tc.cookie})
+			}
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != tc.wantStatus || repo.lookups != tc.wantLookups {
+				t.Fatalf("status=%d lookups=%d body=%s", w.Code, repo.lookups, w.Body.String())
+			}
+			if tc.wantCode != "" && !strings.Contains(w.Body.String(), `"code":"`+tc.wantCode+`"`) {
+				t.Fatal(w.Body.String())
+			}
+			if tc.wantCode == "" && !strings.Contains(w.Body.String(), user.ID) {
+				t.Fatal(w.Body.String())
+			}
+			if strings.Contains(w.Body.String(), token) || strings.Contains(logs.String(), token) || strings.Contains(logs.String(), "secret") {
+				t.Fatal("secret leaked")
+			}
+		})
+	}
+}
+
+func TestMeMissingMiddlewareIdentity(t *testing.T) {
+	s := &server{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	r := gin.New()
+	r.GET("/me", s.Me)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/me", nil))
+	if w.Code != 500 || !strings.Contains(w.Body.String(), `"code":"internal_error"`) {
+		t.Fatal(w.Code, w.Body.String())
 	}
 }
 
