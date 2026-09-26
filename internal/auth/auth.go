@@ -74,7 +74,8 @@ type Service struct {
 // SessionDuration is the fixed, non-sliding lifetime of a login session.
 const SessionDuration = 7 * 24 * time.Hour
 
-// New constructs a concurrent-safe authentication service. A nil clock uses time.Now.
+// New constructs an authentication service. Concurrent use requires a
+// concurrency-safe repository and clock. A nil clock uses time.Now.
 func New(repo Repository, now func() time.Time) *Service {
 	if now == nil {
 		now = time.Now
