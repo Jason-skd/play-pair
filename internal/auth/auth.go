@@ -54,6 +54,7 @@ type Repository interface {
 	Register(context.Context, PasswordCredential, [32]byte, time.Time) error
 	// FindPasswordCredentialByEmail accepts a normalized email and returns ErrNotFound when absent.
 	FindPasswordCredentialByEmail(context.Context, string) (PasswordCredential, error)
+	// CreateSession stores a token digest for an existing user until its fixed expiry.
 	CreateSession(context.Context, string, [32]byte, time.Time, time.Time) error
 	// FindSessionUser reads only session and identity data; expired sessions return ErrNotFound.
 	FindSessionUser(context.Context, [32]byte, time.Time) (User, error)
@@ -73,7 +74,7 @@ type Service struct {
 // SessionDuration is the fixed, non-sliding lifetime of a login session.
 const SessionDuration = 7 * 24 * time.Hour
 
-// New constructs an authentication service. A nil clock uses time.Now.
+// New constructs a concurrent-safe authentication service. A nil clock uses time.Now.
 func New(repo Repository, now func() time.Time) *Service {
 	if now == nil {
 		now = time.Now
@@ -81,7 +82,9 @@ func New(repo Repository, now func() time.Time) *Service {
 	return &Service{repo: repo, now: now, gate: make(chan struct{}, 2)}
 }
 
-// Register creates an identity, password credential, and initial session atomically.
+// Register normalizes email and display name, validates password and name, and
+// creates an identity, credential, and initial session atomically. It returns
+// ErrInvalidInput for invalid data and ErrEmailConflict for an existing email.
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (User, string, time.Time, error) {
 	email, displayName, err := validate(email, password, displayName)
 	if err != nil {
@@ -108,6 +111,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 }
 
 // Login verifies a password credential and creates an independent session.
+// Invalid input, unknown email, and wrong password share ErrInvalidCredentials.
 func (s *Service) Login(ctx context.Context, email, password string) (User, string, time.Time, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !validEmail(email) || !validPassword(password) {
@@ -135,7 +139,8 @@ func (s *Service) Login(ctx context.Context, email, password string) (User, stri
 	return u.User, token, now.Add(SessionDuration), nil
 }
 
-// Authenticate resolves a valid session token to its user identity.
+// Authenticate resolves a valid session token to its user identity. Missing,
+// malformed, expired, and revoked tokens return ErrUnauthenticated.
 func (s *Service) Authenticate(ctx context.Context, token string) (User, error) {
 	digest, ok := tokenDigest(token)
 	if !ok {
@@ -151,7 +156,8 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 	return u, nil
 }
 
-// Logout revokes the presented session. Missing or malformed tokens are already logged out.
+// Logout revokes the presented session. Missing or malformed tokens succeed
+// without a repository call; an absent valid token digest is already revoked.
 func (s *Service) Logout(ctx context.Context, token string) error {
 	digest, ok := tokenDigest(token)
 	if !ok {

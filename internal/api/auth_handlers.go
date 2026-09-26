@@ -22,6 +22,7 @@ const (
 	loginWindow     = 15 * time.Minute
 )
 
+// Register creates a user and initial session after browser and JSON checks.
 func (s *server) Register(c *gin.Context, params generated.RegisterParams) {
 	if string(params.XPlayPairRequest) != "1" {
 		writeError(c, 400, generated.CsrfRejected, "Invalid browser request")
@@ -44,6 +45,7 @@ func (s *server) Register(c *gin.Context, params generated.RegisterParams) {
 	c.JSON(http.StatusCreated, userResponse(u))
 }
 
+// Login verifies credentials and issues an independent session cookie.
 func (s *server) Login(c *gin.Context, params generated.LoginParams) {
 	if string(params.XPlayPairRequest) != "1" {
 		writeError(c, 400, generated.CsrfRejected, "Invalid browser request")
@@ -66,6 +68,7 @@ func (s *server) Login(c *gin.Context, params generated.LoginParams) {
 	c.JSON(http.StatusOK, userResponse(u))
 }
 
+// Logout revokes the presented session; missing and malformed cookies succeed.
 func (s *server) Logout(c *gin.Context, params generated.LogoutParams) {
 	if string(params.XPlayPairRequest) != "1" {
 		writeError(c, 400, generated.CsrfRejected, "Invalid browser request")

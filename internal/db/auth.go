@@ -15,7 +15,8 @@ import (
 )
 
 // Register inserts the identity, password credential, and first session in one transaction.
-// A later insert failure rolls back all earlier writes.
+// A later insert failure rolls back all earlier writes. The caller supplies a
+// token digest and expiry; a duplicate email returns auth.ErrEmailConflict.
 func (db *DB) Register(ctx context.Context, credential auth.PasswordCredential, tokenHash [32]byte, expiresAt time.Time) error {
 	tx, err := db.pool.Begin(ctx)
 	if err != nil {
@@ -59,7 +60,8 @@ func (db *DB) FindPasswordCredentialByEmail(ctx context.Context, email string) (
 	return passwordCredential(u.ID, u.Email, u.PasswordHash, u.DisplayName, u.CreatedAt.Time), nil
 }
 
-// CreateSession persists a token digest for an existing identity.
+// CreateSession persists a token digest for an existing identity. The caller
+// supplies creation and fixed expiry times; database failure wraps errs.DependencyUnavailable.
 func (db *DB) CreateSession(ctx context.Context, userID string, tokenHash [32]byte, createdAt, expiresAt time.Time) error {
 	id, err := parseUUID(userID)
 	if err != nil {
@@ -71,7 +73,8 @@ func (db *DB) CreateSession(ctx context.Context, userID string, tokenHash [32]by
 	return nil
 }
 
-// FindSessionUser resolves an unexpired session without reading password credentials.
+// FindSessionUser resolves an unexpired session without reading password
+// credentials. Missing or expired sessions return auth.ErrNotFound.
 func (db *DB) FindSessionUser(ctx context.Context, tokenHash [32]byte, now time.Time) (auth.User, error) {
 	u, err := db.queries.FindSessionUser(ctx, generated.FindSessionUserParams{TokenHash: tokenHash[:], ExpiresAt: timestamp(now)})
 	if errors.Is(err, pgx.ErrNoRows) {

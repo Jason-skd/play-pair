@@ -1,3 +1,4 @@
+// Package api adapts HTTP requests to health and authentication services.
 package api
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// HealthCheck checks dependency readiness within the caller's context.
 type HealthCheck func(context.Context) error
 type server struct {
 	check        HealthCheck
@@ -20,6 +22,9 @@ type server struct {
 	limits       *limiter
 }
 
+// New assembles HTTP routes and request middleware. The caller owns the check,
+// logger, and authentication service and must keep them valid while serving.
+// A true secureCookie requires HTTPS for browsers to return session cookies.
 func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, authService *auth.Service, secureCookie bool) *gin.Engine {
 	s := &server{check: check, timeout: timeout, log: logger, auth: authService, secureCookie: secureCookie, limits: newLimiter(10000)}
 	r := gin.New()

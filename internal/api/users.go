@@ -11,6 +11,8 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Me returns the identity installed by authentication middleware.
+// Missing middleware identity is an internal assembly error.
 func (s *server) Me(c *gin.Context) {
 	u, ok := authenticatedUser(c.Request.Context())
 	if !ok {

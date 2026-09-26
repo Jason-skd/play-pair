@@ -18,6 +18,7 @@ import (
 	"github.com/Jason-skd/play-pair/internal/errs"
 )
 
+// App owns the HTTP listener, server, and database pool for one process.
 type App struct {
 	server   *http.Server
 	listener net.Listener
@@ -26,6 +27,8 @@ type App struct {
 	logger   *slog.Logger
 }
 
+// Start opens the database and listener, then begins serving in the background.
+// ctx bounds startup; the caller must call Shutdown on a successful result.
 func Start(ctx context.Context, c config.Config, logger *slog.Logger) (*App, error) {
 	startCtx, cancel := context.WithTimeout(ctx, c.StartupTimeout)
 	defer cancel()
@@ -56,8 +59,11 @@ func Start(ctx context.Context, c config.Config, logger *slog.Logger) (*App, err
 	return a, nil
 }
 
+// Addr returns the bound listener address, including an allocated ephemeral port.
 func (a *App) Addr() net.Addr { return a.listener.Addr() }
 
+// Shutdown stops readiness, drains HTTP using ctx, and closes the database pool.
+// If draining fails, it force-closes the server and returns the drain error.
 func (a *App) Shutdown(ctx context.Context) error {
 	a.ready.Store(false)
 	err := a.server.Shutdown(ctx)

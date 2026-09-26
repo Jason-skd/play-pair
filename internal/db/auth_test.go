@@ -35,6 +35,7 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
+		// Tests remove the user so its cascaded credential and sessions do not accumulate.
 		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
 		if _, err := database.pool.Exec(cleanup, "DELETE FROM users WHERE id = $1", u.ID); err != nil {
