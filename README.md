@@ -7,11 +7,11 @@
 
 ## 常用指令
 
-当前已建立 Go module、配置与 HTTP 探针。完整的启动和检查命令在数据库与 CI 单元完成后补齐。
+当前已建立 Go module、配置、HTTP 探针和 PostgreSQL 连接。完整的启动和检查命令在自动化检查单元补齐。
 
 ## 项目架构
 
-当前 `internal/api` 承担 Gin 协议与错误映射，`internal/config` 承担进程配置。后续 `internal/app` 负责装配与生命周期，`internal/db` 负责 PostgreSQL 边界。
+`cmd/playpair-api` 负责进程信号；`internal/app` 负责装配与生命周期；`internal/api` 承担 Gin 协议与错误映射；`internal/config` 承担进程配置；`internal/db` 负责 PostgreSQL/sqlc 边界。
 
 ## 文档索引
 
@@ -39,4 +39,4 @@
 
 ## 权威来源
 
-HTTP 契约以 `api/openapi.yaml` 为权威来源；生成绑定位于 `internal/api/generated/`，不得手工修改。数据库 schema 和查询权威源随数据库单元建立。
+HTTP 契约以 `api/openapi.yaml` 为权威来源；数据库 schema 以 `db/migrations/`、查询以 `db/queries/` 为权威来源。`internal/api/generated/` 和 `internal/db/generated/` 都是生成代码，不得手工修改。
