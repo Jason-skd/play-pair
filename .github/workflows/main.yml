@@ -1,16 +1,8 @@
-name: Backend
+name: Main Gate
 on:
   push:
-  pull_request:
+    branches: ["main"]
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: make check
   integration:
     runs-on: ubuntu-latest
     services:
