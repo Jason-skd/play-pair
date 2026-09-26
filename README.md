@@ -42,6 +42,10 @@ make test-smoke
 
 这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。`internal/auth` 负责密码和服务端会话生命周期；其他业务模块只接收认证后的用户身份。
 
+`users` 保存业务可引用的用户身份；`password_credentials` 以 `user_id` 为主键，一对一保存密码哈希和更新时间。注册在同一事务中写入用户、密码凭据和 session；登录通过邮箱联表读取凭据，session 验证仅查询 `sessions` 和 `users`，不读取密码哈希。
+
+未合并的 `00002_auth.sql` 已直接调整为上述结构。已执行旧版 00002 的开发数据库不会因再次运行 `migrate-up` 自动更新；验证本分支时应使用新建的独立测试库，不要直接重置已有数据。
+
 | 位置                | 职责                                        |
 | ------------------- | ------------------------------------------- |
 | `cmd/playpair-api/` | 进程入口、信号处理和退出状态                |

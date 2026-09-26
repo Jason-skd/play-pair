@@ -14,25 +14,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (db *DB) Register(ctx context.Context, user auth.StoredUser, tokenHash [32]byte, expiresAt time.Time) error {
+// Register inserts the identity, password credential, and first session in one transaction.
+// A later insert failure rolls back all earlier writes.
+func (db *DB) Register(ctx context.Context, credential auth.PasswordCredential, tokenHash [32]byte, expiresAt time.Time) error {
 	tx, err := db.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: begin registration", errs.DependencyUnavailable)
 	}
 	defer tx.Rollback(ctx)
 	q := db.queries.WithTx(tx)
-	id, err := parseUUID(user.ID)
+	id, err := parseUUID(credential.ID)
 	if err != nil {
 		return err
 	}
-	if err := q.CreateUser(ctx, generated.CreateUserParams{ID: id, Email: user.Email, PasswordHash: user.PasswordHash, DisplayName: user.DisplayName, CreatedAt: timestamp(user.CreatedAt)}); err != nil {
+	if err := q.CreateUser(ctx, generated.CreateUserParams{ID: id, Email: credential.Email, DisplayName: credential.DisplayName, CreatedAt: timestamp(credential.CreatedAt)}); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return auth.ErrEmailConflict
 		}
 		return fmt.Errorf("%w: create user", errs.DependencyUnavailable)
 	}
-	if err := q.CreateSession(ctx, generated.CreateSessionParams{TokenHash: tokenHash[:], UserID: id, CreatedAt: timestamp(user.CreatedAt), ExpiresAt: timestamp(expiresAt)}); err != nil {
+	if err := q.CreatePasswordCredential(ctx, generated.CreatePasswordCredentialParams{UserID: id, PasswordHash: credential.PasswordHash, UpdatedAt: timestamp(credential.CreatedAt)}); err != nil {
+		return fmt.Errorf("%w: create password credential", errs.DependencyUnavailable)
+	}
+	if err := q.CreateSession(ctx, generated.CreateSessionParams{TokenHash: tokenHash[:], UserID: id, CreatedAt: timestamp(credential.CreatedAt), ExpiresAt: timestamp(expiresAt)}); err != nil {
 		return fmt.Errorf("%w: create registration session", errs.DependencyUnavailable)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -41,17 +46,20 @@ func (db *DB) Register(ctx context.Context, user auth.StoredUser, tokenHash [32]
 	return nil
 }
 
-func (db *DB) FindByEmail(ctx context.Context, email string) (auth.StoredUser, error) {
-	u, err := db.queries.FindUserByEmail(ctx, email)
+// FindPasswordCredentialByEmail loads password-login data for a normalized email.
+// A user without a password credential is reported as auth.ErrNotFound.
+func (db *DB) FindPasswordCredentialByEmail(ctx context.Context, email string) (auth.PasswordCredential, error) {
+	u, err := db.queries.FindPasswordCredentialByEmail(ctx, email)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return auth.StoredUser{}, auth.ErrNotFound
+		return auth.PasswordCredential{}, auth.ErrNotFound
 	}
 	if err != nil {
-		return auth.StoredUser{}, fmt.Errorf("%w: find user", errs.DependencyUnavailable)
+		return auth.PasswordCredential{}, fmt.Errorf("%w: find password credential", errs.DependencyUnavailable)
 	}
-	return storedUser(u.ID, u.Email, u.PasswordHash, u.DisplayName, u.CreatedAt.Time), nil
+	return passwordCredential(u.ID, u.Email, u.PasswordHash, u.DisplayName, u.CreatedAt.Time), nil
 }
 
+// CreateSession persists a token digest for an existing identity.
 func (db *DB) CreateSession(ctx context.Context, userID string, tokenHash [32]byte, createdAt, expiresAt time.Time) error {
 	id, err := parseUUID(userID)
 	if err != nil {
@@ -63,17 +71,19 @@ func (db *DB) CreateSession(ctx context.Context, userID string, tokenHash [32]by
 	return nil
 }
 
-func (db *DB) FindSessionUser(ctx context.Context, tokenHash [32]byte, now time.Time) (auth.StoredUser, error) {
+// FindSessionUser resolves an unexpired session without reading password credentials.
+func (db *DB) FindSessionUser(ctx context.Context, tokenHash [32]byte, now time.Time) (auth.User, error) {
 	u, err := db.queries.FindSessionUser(ctx, generated.FindSessionUserParams{TokenHash: tokenHash[:], ExpiresAt: timestamp(now)})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return auth.StoredUser{}, auth.ErrNotFound
+		return auth.User{}, auth.ErrNotFound
 	}
 	if err != nil {
-		return auth.StoredUser{}, fmt.Errorf("%w: find session", errs.DependencyUnavailable)
+		return auth.User{}, fmt.Errorf("%w: find session", errs.DependencyUnavailable)
 	}
-	return storedUser(u.ID, u.Email, u.PasswordHash, u.DisplayName, u.CreatedAt.Time), nil
+	return user(u.ID, u.Email, u.DisplayName, u.CreatedAt.Time), nil
 }
 
+// DeleteSession revokes a session; an absent digest is already revoked.
 func (db *DB) DeleteSession(ctx context.Context, tokenHash [32]byte) error {
 	_, err := db.queries.DeleteSession(ctx, tokenHash[:])
 	if err != nil {
@@ -90,8 +100,12 @@ func parseUUID(v string) (pgtype.UUID, error) {
 	return id, nil
 }
 
-func storedUser(id pgtype.UUID, email, hash, name string, created time.Time) auth.StoredUser {
-	return auth.StoredUser{User: auth.User{ID: uuidString(id), Email: email, DisplayName: name, CreatedAt: created}, PasswordHash: hash}
+func user(id pgtype.UUID, email, name string, created time.Time) auth.User {
+	return auth.User{ID: uuidString(id), Email: email, DisplayName: name, CreatedAt: created}
+}
+
+func passwordCredential(id pgtype.UUID, email, hash, name string, created time.Time) auth.PasswordCredential {
+	return auth.PasswordCredential{User: user(id, email, name, created), PasswordHash: hash}
 }
 
 func timestamp(v time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: v, Valid: true} }

@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createPasswordCredential = `-- name: CreatePasswordCredential :exec
+INSERT INTO password_credentials (user_id, password_hash, updated_at)
+VALUES ($1, $2, $3)
+`
+
+type CreatePasswordCredentialParams struct {
+	UserID       pgtype.UUID
+	PasswordHash string
+	UpdatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) CreatePasswordCredential(ctx context.Context, arg CreatePasswordCredentialParams) error {
+	_, err := q.db.Exec(ctx, createPasswordCredential, arg.UserID, arg.PasswordHash, arg.UpdatedAt)
+	return err
+}
+
 const createSession = `-- name: CreateSession :exec
 INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
 VALUES ($1, $2, $3, $4)
@@ -34,23 +50,21 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 }
 
 const createUser = `-- name: CreateUser :exec
-INSERT INTO users (id, email, password_hash, display_name, created_at)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO users (id, email, display_name, created_at)
+VALUES ($1, $2, $3, $4)
 `
 
 type CreateUserParams struct {
-	ID           pgtype.UUID
-	Email        string
-	PasswordHash string
-	DisplayName  string
-	CreatedAt    pgtype.Timestamptz
+	ID          pgtype.UUID
+	Email       string
+	DisplayName string
+	CreatedAt   pgtype.Timestamptz
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	_, err := q.db.Exec(ctx, createUser,
 		arg.ID,
 		arg.Email,
-		arg.PasswordHash,
 		arg.DisplayName,
 		arg.CreatedAt,
 	)
@@ -69,8 +83,38 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) (int64, e
 	return result.RowsAffected(), nil
 }
 
+const findPasswordCredentialByEmail = `-- name: FindPasswordCredentialByEmail :one
+SELECT u.id, u.email, u.display_name, u.created_at, pc.password_hash, pc.updated_at
+FROM users u
+JOIN password_credentials pc ON pc.user_id = u.id
+WHERE u.email = $1
+`
+
+type FindPasswordCredentialByEmailRow struct {
+	ID           pgtype.UUID
+	Email        string
+	DisplayName  string
+	CreatedAt    pgtype.Timestamptz
+	PasswordHash string
+	UpdatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) FindPasswordCredentialByEmail(ctx context.Context, email string) (FindPasswordCredentialByEmailRow, error) {
+	row := q.db.QueryRow(ctx, findPasswordCredentialByEmail, email)
+	var i FindPasswordCredentialByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.CreatedAt,
+		&i.PasswordHash,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const findSessionUser = `-- name: FindSessionUser :one
-SELECT u.id, u.email, u.password_hash, u.display_name, u.created_at, s.expires_at
+SELECT u.id, u.email, u.display_name, u.created_at, s.expires_at
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > $2
@@ -82,12 +126,11 @@ type FindSessionUserParams struct {
 }
 
 type FindSessionUserRow struct {
-	ID           pgtype.UUID
-	Email        string
-	PasswordHash string
-	DisplayName  string
-	CreatedAt    pgtype.Timestamptz
-	ExpiresAt    pgtype.Timestamptz
+	ID          pgtype.UUID
+	Email       string
+	DisplayName string
+	CreatedAt   pgtype.Timestamptz
+	ExpiresAt   pgtype.Timestamptz
 }
 
 func (q *Queries) FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error) {
@@ -96,48 +139,9 @@ func (q *Queries) FindSessionUser(ctx context.Context, arg FindSessionUserParams
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
-		&i.PasswordHash,
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.ExpiresAt,
-	)
-	return i, err
-}
-
-const findUserByEmail = `-- name: FindUserByEmail :one
-SELECT id, email, password_hash, display_name, created_at
-FROM users
-WHERE email = $1
-`
-
-func (q *Queries) FindUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRow(ctx, findUserByEmail, email)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.DisplayName,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const findUserByID = `-- name: FindUserByID :one
-SELECT id, email, password_hash, display_name, created_at
-FROM users
-WHERE id = $1
-`
-
-func (q *Queries) FindUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
-	row := q.db.QueryRow(ctx, findUserByID, id)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.DisplayName,
-		&i.CreatedAt,
 	)
 	return i, err
 }

@@ -20,31 +20,31 @@ import (
 
 type authRepo struct {
 	mu       sync.Mutex
-	users    map[string]auth.StoredUser
-	sessions map[[32]byte]auth.StoredUser
+	users    map[string]auth.PasswordCredential
+	sessions map[[32]byte]auth.User
 	expires  map[[32]byte]time.Time
 }
 
 func newAuthRepo() *authRepo {
-	return &authRepo{users: map[string]auth.StoredUser{}, sessions: map[[32]byte]auth.StoredUser{}, expires: map[[32]byte]time.Time{}}
+	return &authRepo{users: map[string]auth.PasswordCredential{}, sessions: map[[32]byte]auth.User{}, expires: map[[32]byte]time.Time{}}
 }
-func (r *authRepo) Register(_ context.Context, u auth.StoredUser, h [32]byte, exp time.Time) error {
+func (r *authRepo) Register(_ context.Context, u auth.PasswordCredential, h [32]byte, exp time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, ok := r.users[u.Email]; ok {
 		return auth.ErrEmailConflict
 	}
 	r.users[u.Email] = u
-	r.sessions[h] = u
+	r.sessions[h] = u.User
 	r.expires[h] = exp
 	return nil
 }
-func (r *authRepo) FindByEmail(_ context.Context, email string) (auth.StoredUser, error) {
+func (r *authRepo) FindPasswordCredentialByEmail(_ context.Context, email string) (auth.PasswordCredential, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	u, ok := r.users[email]
 	if !ok {
-		return auth.StoredUser{}, auth.ErrNotFound
+		return auth.PasswordCredential{}, auth.ErrNotFound
 	}
 	return u, nil
 }
@@ -53,19 +53,19 @@ func (r *authRepo) CreateSession(_ context.Context, id string, h [32]byte, _ tim
 	defer r.mu.Unlock()
 	for _, u := range r.users {
 		if u.ID == id {
-			r.sessions[h] = u
+			r.sessions[h] = u.User
 			r.expires[h] = exp
 			return nil
 		}
 	}
 	return auth.ErrNotFound
 }
-func (r *authRepo) FindSessionUser(_ context.Context, h [32]byte, now time.Time) (auth.StoredUser, error) {
+func (r *authRepo) FindSessionUser(_ context.Context, h [32]byte, now time.Time) (auth.User, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	u, ok := r.sessions[h]
 	if !ok || !r.expires[h].After(now) {
-		return auth.StoredUser{}, auth.ErrNotFound
+		return auth.User{}, auth.ErrNotFound
 	}
 	return u, nil
 }

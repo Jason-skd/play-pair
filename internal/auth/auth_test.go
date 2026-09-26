@@ -8,44 +8,44 @@ import (
 )
 
 type memoryRepo struct {
-	users    map[string]StoredUser
-	sessions map[[32]byte]StoredUser
+	users    map[string]PasswordCredential
+	sessions map[[32]byte]User
 	expires  map[[32]byte]time.Time
 }
 
 func newMemory() *memoryRepo {
-	return &memoryRepo{map[string]StoredUser{}, map[[32]byte]StoredUser{}, map[[32]byte]time.Time{}}
+	return &memoryRepo{map[string]PasswordCredential{}, map[[32]byte]User{}, map[[32]byte]time.Time{}}
 }
-func (m *memoryRepo) Register(_ context.Context, u StoredUser, h [32]byte, exp time.Time) error {
+func (m *memoryRepo) Register(_ context.Context, u PasswordCredential, h [32]byte, exp time.Time) error {
 	if _, ok := m.users[u.Email]; ok {
 		return ErrEmailConflict
 	}
 	m.users[u.Email] = u
-	m.sessions[h] = u
+	m.sessions[h] = u.User
 	m.expires[h] = exp
 	return nil
 }
-func (m *memoryRepo) FindByEmail(_ context.Context, e string) (StoredUser, error) {
+func (m *memoryRepo) FindPasswordCredentialByEmail(_ context.Context, e string) (PasswordCredential, error) {
 	u, ok := m.users[e]
 	if !ok {
-		return StoredUser{}, ErrNotFound
+		return PasswordCredential{}, ErrNotFound
 	}
 	return u, nil
 }
 func (m *memoryRepo) CreateSession(_ context.Context, id string, h [32]byte, _ time.Time, exp time.Time) error {
 	for _, u := range m.users {
 		if u.ID == id {
-			m.sessions[h] = u
+			m.sessions[h] = u.User
 			m.expires[h] = exp
 			return nil
 		}
 	}
 	return errors.New("missing")
 }
-func (m *memoryRepo) FindSessionUser(_ context.Context, h [32]byte, now time.Time) (StoredUser, error) {
+func (m *memoryRepo) FindSessionUser(_ context.Context, h [32]byte, now time.Time) (User, error) {
 	u, ok := m.sessions[h]
 	if !ok || !m.expires[h].After(now) {
-		return StoredUser{}, ErrNotFound
+		return User{}, ErrNotFound
 	}
 	return u, nil
 }

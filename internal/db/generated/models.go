@@ -8,6 +8,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type PasswordCredential struct {
+	UserID       pgtype.UUID
+	PasswordHash string
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type Session struct {
 	TokenHash []byte
 	UserID    pgtype.UUID
@@ -16,9 +22,8 @@ type Session struct {
 }
 
 type User struct {
-	ID           pgtype.UUID
-	Email        string
-	PasswordHash string
-	DisplayName  string
-	CreatedAt    pgtype.Timestamptz
+	ID          pgtype.UUID
+	Email       string
+	DisplayName string
+	CreatedAt   pgtype.Timestamptz
 }

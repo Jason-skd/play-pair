@@ -2,12 +2,14 @@ package db
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/Jason-skd/play-pair/internal/auth"
+	"github.com/Jason-skd/play-pair/internal/errs"
 )
 
 func TestAuthRepositoryRealDatabase(t *testing.T) {
@@ -32,11 +34,38 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		if _, err := database.pool.Exec(cleanup, "DELETE FROM users WHERE id = $1", u.ID); err != nil {
+			t.Errorf("cleanup user: %v", err)
+		}
+	}()
+	var hash string
+	var updatedAt time.Time
+	if err := database.pool.QueryRow(ctx, "SELECT password_hash, updated_at FROM password_credentials WHERE user_id = $1", u.ID).Scan(&hash, &updatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if hash == "" || hash == "correct horse battery" || !updatedAt.Equal(now) {
+		t.Fatal("credential must contain a hash and the registration timestamp")
+	}
+	if _, _, _, err := service.Login(ctx, email, "correct horse battery"); err != nil {
+		t.Fatalf("password login: %v", err)
+	}
 	if got, err := service.Authenticate(ctx, token); err != nil || got.ID != u.ID {
 		t.Fatalf("authenticate: %#v %v", got, err)
 	}
 	if _, _, _, err := service.Register(ctx, email, "different valid password", "Duplicate"); !errors.Is(err, auth.ErrEmailConflict) {
 		t.Fatalf("duplicate: %v", err)
+	}
+	if _, err := database.pool.Exec(ctx, "DELETE FROM password_credentials WHERE user_id = $1", u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := service.Authenticate(ctx, token); err != nil || got.ID != u.ID || got.Email != u.Email || got.DisplayName != u.DisplayName || !got.CreatedAt.Equal(u.CreatedAt) {
+		t.Fatalf("session without password credential: %#v %v", got, err)
+	}
+	if _, _, _, err := service.Login(ctx, email, "correct horse battery"); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("login without password credential: %v", err)
 	}
 	if err := service.Logout(ctx, token); err != nil {
 		t.Fatal(err)
@@ -44,4 +73,38 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 	if _, err := service.Authenticate(ctx, token); !errors.Is(err, auth.ErrUnauthenticated) {
 		t.Fatalf("revoked: %v", err)
 	}
+
+	t.Run("session failure rolls back identity and credential", func(t *testing.T) {
+		var id string
+		// Let PostgreSQL supply a valid UUID without coupling this test to auth's generator.
+		if err := database.pool.QueryRow(ctx, "SELECT gen_random_uuid()::text").Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
+			defer stop()
+			if _, err := database.pool.Exec(cleanup, "DELETE FROM users WHERE id = $1", id); err != nil {
+				t.Errorf("cleanup rollback fixture: %v", err)
+			}
+		}()
+		credential := auth.PasswordCredential{User: auth.User{ID: id, Email: id + "@example.com", DisplayName: "Rollback", CreatedAt: now}, PasswordHash: hash}
+		var digest [32]byte
+		if _, err := rand.Read(digest[:]); err != nil {
+			t.Fatal(err)
+		}
+		// Equal creation and expiry violates the session CHECK after both earlier inserts.
+		if err := database.Register(ctx, credential, digest, now); !errors.Is(err, errs.DependencyUnavailable) {
+			t.Fatalf("invalid session expiry: %v", err)
+		}
+		var users, credentials, sessions int
+		if err := database.pool.QueryRow(ctx, `SELECT
+			(SELECT count(*) FROM users WHERE id = $1),
+			(SELECT count(*) FROM password_credentials WHERE user_id = $1),
+			(SELECT count(*) FROM sessions WHERE user_id = $1)`, id).Scan(&users, &credentials, &sessions); err != nil {
+			t.Fatal(err)
+		}
+		if users != 0 || credentials != 0 || sessions != 0 {
+			t.Fatalf("partial registration persisted: users=%d credentials=%d sessions=%d", users, credentials, sessions)
+		}
+	})
 }

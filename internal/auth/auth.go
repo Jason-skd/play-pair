@@ -19,13 +19,20 @@ import (
 )
 
 var (
-	ErrInvalidInput       = errors.New("invalid input")
-	ErrEmailConflict      = errors.New("email conflict")
+	// ErrInvalidInput identifies registration data that violates the public contract.
+	ErrInvalidInput = errors.New("invalid input")
+	// ErrEmailConflict identifies an email that is already registered.
+	ErrEmailConflict = errors.New("email conflict")
+	// ErrInvalidCredentials deliberately covers both an unknown email and a wrong password.
 	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrUnauthenticated    = errors.New("unauthenticated")
-	ErrNotFound           = errors.New("not found")
+	// ErrUnauthenticated identifies a missing, malformed, expired, or revoked session.
+	ErrUnauthenticated = errors.New("unauthenticated")
+	// ErrNotFound is returned by repositories when an authentication record does not exist.
+	ErrNotFound = errors.New("not found")
 )
 
+// User is the authentication boundary's view of a system identity.
+// It intentionally excludes password and session state.
 type User struct {
 	ID          string
 	Email       string
@@ -33,19 +40,28 @@ type User struct {
 	CreatedAt   time.Time
 }
 
-type StoredUser struct {
+// PasswordCredential combines a user identity with the password hash needed
+// only by registration and password login.
+type PasswordCredential struct {
 	User
 	PasswordHash string
 }
 
+// Repository persists identities, password credentials, and sessions while
+// keeping their storage-specific representation outside the service.
 type Repository interface {
-	Register(context.Context, StoredUser, [32]byte, time.Time) error
-	FindByEmail(context.Context, string) (StoredUser, error)
+	// Register commits the identity, password credential, and session together.
+	Register(context.Context, PasswordCredential, [32]byte, time.Time) error
+	// FindPasswordCredentialByEmail accepts a normalized email and returns ErrNotFound when absent.
+	FindPasswordCredentialByEmail(context.Context, string) (PasswordCredential, error)
 	CreateSession(context.Context, string, [32]byte, time.Time, time.Time) error
-	FindSessionUser(context.Context, [32]byte, time.Time) (StoredUser, error)
+	// FindSessionUser reads only session and identity data; expired sessions return ErrNotFound.
+	FindSessionUser(context.Context, [32]byte, time.Time) (User, error)
+	// DeleteSession is idempotent, including when the session does not exist.
 	DeleteSession(context.Context, [32]byte) error
 }
 
+// Service implements password registration, login, and server-side sessions.
 type Service struct {
 	repo      Repository
 	now       func() time.Time
@@ -54,8 +70,10 @@ type Service struct {
 	dummyHash string
 }
 
+// SessionDuration is the fixed, non-sliding lifetime of a login session.
 const SessionDuration = 7 * 24 * time.Hour
 
+// New constructs an authentication service. A nil clock uses time.Now.
 func New(repo Repository, now func() time.Time) *Service {
 	if now == nil {
 		now = time.Now
@@ -63,6 +81,7 @@ func New(repo Repository, now func() time.Time) *Service {
 	return &Service{repo: repo, now: now, gate: make(chan struct{}, 2)}
 }
 
+// Register creates an identity, password credential, and initial session atomically.
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (User, string, time.Time, error) {
 	email, displayName, err := validate(email, password, displayName)
 	if err != nil {
@@ -82,18 +101,19 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	}
 	now := s.now().UTC()
 	user := User{ID: id, Email: email, DisplayName: displayName, CreatedAt: now}
-	if err := s.repo.Register(ctx, StoredUser{User: user, PasswordHash: hash}, digest, now.Add(SessionDuration)); err != nil {
+	if err := s.repo.Register(ctx, PasswordCredential{User: user, PasswordHash: hash}, digest, now.Add(SessionDuration)); err != nil {
 		return User{}, "", time.Time{}, err
 	}
 	return user, token, now.Add(SessionDuration), nil
 }
 
+// Login verifies a password credential and creates an independent session.
 func (s *Service) Login(ctx context.Context, email, password string) (User, string, time.Time, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !validEmail(email) || !validPassword(password) {
 		return User{}, "", time.Time{}, ErrInvalidCredentials
 	}
-	u, err := s.repo.FindByEmail(ctx, email)
+	u, err := s.repo.FindPasswordCredentialByEmail(ctx, email)
 	if errors.Is(err, ErrNotFound) {
 		_ = s.verify(ctx, password, s.dummy())
 		return User{}, "", time.Time{}, ErrInvalidCredentials
@@ -115,6 +135,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (User, stri
 	return u.User, token, now.Add(SessionDuration), nil
 }
 
+// Authenticate resolves a valid session token to its user identity.
 func (s *Service) Authenticate(ctx context.Context, token string) (User, error) {
 	digest, ok := tokenDigest(token)
 	if !ok {
@@ -127,9 +148,10 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 	if err != nil {
 		return User{}, err
 	}
-	return u.User, nil
+	return u, nil
 }
 
+// Logout revokes the presented session. Missing or malformed tokens are already logged out.
 func (s *Service) Logout(ctx context.Context, token string) error {
 	digest, ok := tokenDigest(token)
 	if !ok {
@@ -196,6 +218,7 @@ func (s *Service) verify(ctx context.Context, password, encoded string) bool {
 	}
 	var memory, iterations uint32
 	var parallel uint8
+	// Accept only the supported cost profile so stored data cannot request unbounded work.
 	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &iterations, &parallel); err != nil || memory != 64*1024 || iterations != 3 || parallel != 1 {
 		return false
 	}
@@ -217,6 +240,7 @@ func (s *Service) dummy() string {
 	return s.dummyHash
 }
 
+// newToken returns the client secret and its digest; only the digest is persisted.
 func newToken() (string, [32]byte, error) {
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
