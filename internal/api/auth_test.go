@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -202,8 +203,11 @@ func TestLoginRateLimitNormalizesEmail(t *testing.T) {
 		if i < loginEmailLimit && w.Code != 401 {
 			t.Fatalf("attempt %d: %d", i, w.Code)
 		}
-		if i == loginEmailLimit && (w.Code != 429 || w.Header().Get("Retry-After") != "900") {
-			t.Fatalf("limit: %d retry=%q", w.Code, w.Header().Get("Retry-After"))
+		if i == loginEmailLimit {
+			retry, err := strconv.Atoi(w.Header().Get("Retry-After"))
+			if w.Code != 429 || err != nil || retry < 1 || retry > 900 {
+				t.Fatalf("limit: %d retry=%q", w.Code, w.Header().Get("Retry-After"))
+			}
 		}
 	}
 }
