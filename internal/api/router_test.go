@@ -8,11 +8,17 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Jason-skd/play-pair/internal/errs"
 	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v3"
 )
 
 func TestRouter(t *testing.T) {
@@ -32,7 +38,7 @@ func TestRouter(t *testing.T) {
 		{"method", "POST", "/healthz", func(context.Context) error { return nil }, 405, "method_not_allowed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := New(tc.check, time.Second, logger)
+			r := New(tc.check, time.Second, logger, nil, false)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
 			if w.Code != tc.want {
@@ -65,7 +71,7 @@ func TestRouter(t *testing.T) {
 
 func TestRecovery(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	r := New(func(context.Context) error { panic("secret") }, time.Second, logger)
+	r := New(func(context.Context) error { panic("secret") }, time.Second, logger, nil, false)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if w.Code != 500 || json.Valid(w.Body.Bytes()) == false || w.Body.String() == "secret" {
@@ -75,7 +81,7 @@ func TestRecovery(t *testing.T) {
 
 func TestReadyCancellation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	r := New(func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }, time.Millisecond, logger)
+	r := New(func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }, time.Millisecond, logger, nil, false)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if w.Code != 503 {
@@ -83,4 +89,33 @@ func TestReadyCancellation(t *testing.T) {
 	}
 }
 
-var _ *gin.Engine = New(func(context.Context) error { return nil }, time.Second, slog.Default())
+var _ *gin.Engine = New(func(context.Context) error { return nil }, time.Second, slog.Default(), nil, false)
+
+func TestRoutesMatchOpenAPI(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec struct {
+		Paths map[string]map[string]any `yaml:"paths"`
+	}
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		t.Fatal(err)
+	}
+	var want []string
+	for path, operations := range spec.Paths {
+		for method := range operations {
+			want = append(want, method+" "+path)
+		}
+	}
+	r := New(nil, time.Second, slog.Default(), nil, true)
+	var got []string
+	for _, route := range r.Routes() {
+		got = append(got, strings.ToLower(route.Method)+" "+route.Path)
+	}
+	sort.Strings(want)
+	sort.Strings(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("routes=%v\nOpenAPI=%v", got, want)
+	}
+}

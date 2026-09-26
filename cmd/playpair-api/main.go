@@ -1,3 +1,4 @@
+// Package main starts the PlayPair HTTP process and shuts it down on a signal.
 package main
 
 import (

@@ -1,76 +1,48 @@
+// Package api adapts HTTP requests to health and authentication services.
 package api
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"errors"
 	"log/slog"
-	"net/http"
 	"time"
 
 	"github.com/Jason-skd/play-pair/internal/api/generated"
-	"github.com/Jason-skd/play-pair/internal/errs"
+	"github.com/Jason-skd/play-pair/internal/auth"
 	"github.com/gin-gonic/gin"
 )
 
+// HealthCheck checks dependency readiness within the caller's context.
 type HealthCheck func(context.Context) error
 type server struct {
-	check   HealthCheck
-	timeout time.Duration
-	log     *slog.Logger
+	check        HealthCheck
+	timeout      time.Duration
+	log          *slog.Logger
+	auth         *auth.Service
+	secureCookie bool
+	limits       *limiter
 }
 
-func New(check HealthCheck, timeout time.Duration, logger *slog.Logger) *gin.Engine {
-	s := &server{check, timeout, logger}
+// New assembles HTTP routes and request middleware. The caller owns the check,
+// logger, and authentication service and must keep them valid while serving.
+// A true secureCookie requires HTTPS for browsers to return session cookies.
+func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, authService *auth.Service, secureCookie bool) *gin.Engine {
+	s := &server{check: check, timeout: timeout, log: logger, auth: authService, secureCookie: secureCookie, limits: newLimiter(10000)}
 	r := gin.New()
+	_ = r.SetTrustedProxies(nil)
 	r.HandleMethodNotAllowed = true
 	r.RedirectTrailingSlash = false
 	r.RedirectFixedPath = false
-	r.Use(func(c *gin.Context) {
-		var id [16]byte
-		_, _ = rand.Read(id[:])
-		c.Header("X-Request-ID", hex.EncodeToString(id[:]))
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				logger.Error("request panic", "request_id", c.Writer.Header().Get("X-Request-ID"))
-				if !c.Writer.Written() {
-					writeError(c, http.StatusInternalServerError, generated.InternalError, "Internal server error")
-				}
-				c.Abort()
-			}
-		}()
-		c.Next()
-	})
+	r.Use(requestMiddleware(logger))
 	r.NoRoute(func(c *gin.Context) { writeError(c, 404, generated.NotFound, "Not found") })
 	r.NoMethod(func(c *gin.Context) { writeError(c, 405, generated.MethodNotAllowed, "Method not allowed") })
-	generated.RegisterHandlers(r, s)
+	wrapper := generated.ServerInterfaceWrapper{Handler: s, HandlerMiddlewares: []generated.MiddlewareFunc{crossOriginProtection()}, ErrorHandler: func(c *gin.Context, _ error, status int) {
+		writeError(c, status, generated.InvalidInput, "Invalid request")
+	}}
+	r.POST("/api/v1/auth/register", wrapper.Register)
+	r.POST("/api/v1/auth/login", wrapper.Login)
+	r.POST("/api/v1/auth/logout", wrapper.Logout)
+	r.GET("/api/v1/me", s.requireUser(), wrapper.Me)
+	r.GET("/healthz", wrapper.Health)
+	r.GET("/readyz", wrapper.Ready)
 	return r
-}
-
-func (s *server) Health(c *gin.Context) { c.JSON(200, generated.Health{Status: generated.Ok}) }
-func (s *server) Ready(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), s.timeout)
-	defer cancel()
-	if err := s.check(ctx); err != nil {
-		s.failure(c, err)
-		return
-	}
-	c.JSON(200, generated.Health{Status: generated.Ok})
-}
-func (s *server) failure(c *gin.Context, err error) {
-	// Do not log raw dependency errors: they can contain DSNs or credentials.
-	status, code, message := 500, generated.InternalError, "Internal server error"
-	if errors.Is(err, errs.DependencyUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		status, code, message = 503, generated.DependencyUnavailable, "Service temporarily unavailable"
-	}
-	s.log.Error("request failed", "request_id", c.Writer.Header().Get("X-Request-ID"), "category", code)
-	writeError(c, status, code, message)
-}
-func writeError(c *gin.Context, status int, code generated.ErrorResponseErrorCode, message string) {
-	var body generated.ErrorResponse
-	body.Error.Code = code
-	body.Error.Message = message
-	body.Error.RequestId = c.Writer.Header().Get("X-Request-ID")
-	c.AbortWithStatusJSON(status, body)
 }

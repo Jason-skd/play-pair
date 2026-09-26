@@ -22,7 +22,7 @@ func TestLifecycle(t *testing.T) {
 		t.Skip("set TEST_DATABASE_URL for integration tests")
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	cfg := config.Config{HTTPAddr: "127.0.0.1:0", DatabaseURL: url, DBMaxConns: 2, StartupTimeout: 5 * time.Second, ReadyTimeout: time.Second, ShutdownTimeout: time.Second}
+	cfg := config.Config{HTTPAddr: "127.0.0.1:0", DatabaseURL: url, DBMaxConns: 2, StartupTimeout: 5 * time.Second, ReadyTimeout: time.Second, ShutdownTimeout: time.Second, AuthCookieSecure: false}
 	a, err := Start(context.Background(), cfg, logger)
 	if err != nil {
 		t.Fatal(err)

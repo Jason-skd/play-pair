@@ -3,6 +3,48 @@ info:
   title: PlayPair API
   version: 0.1.0
 paths:
+  /api/v1/auth/register:
+    post:
+      operationId: register
+      parameters:
+        - $ref: '#/components/parameters/BrowserWriteHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegisterRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/UserResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      parameters:
+        - $ref: '#/components/parameters/BrowserWriteHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/UserResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      parameters:
+        - $ref: '#/components/parameters/BrowserWriteHeader'
+      responses:
+        '204': {description: Logged out}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/me:
+    get:
+      operationId: me
+      security:
+        - CookieSession: []
+      responses:
+        '200': {$ref: '#/components/responses/UserResponse'}
+        default: {$ref: '#/components/responses/Error'}
   /healthz:
     get:
       operationId: health
@@ -22,7 +64,26 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 components:
+  securitySchemes:
+    CookieSession:
+      type: apiKey
+      in: cookie
+      name: playpair_session
+  parameters:
+    BrowserWriteHeader:
+      name: X-PlayPair-Request
+      in: header
+      required: true
+      schema: {type: string, enum: ['1']}
   responses:
+    UserResponse:
+      description: Authenticated user
+      headers:
+        X-Request-ID:
+          schema: {type: string, minLength: 1}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/User'}
     Healthy:
       description: Available
       headers:
@@ -42,6 +103,30 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, displayName]
+      properties:
+        email: {type: string, minLength: 3, maxLength: 254}
+        password: {type: string, minLength: 15, maxLength: 512}
+        displayName: {type: string, minLength: 1, maxLength: 320}
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: {type: string, minLength: 3, maxLength: 254}
+        password: {type: string, minLength: 15, maxLength: 512}
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, email, displayName, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        displayName: {type: string, minLength: 1}
+        createdAt: {type: string, format: date-time}
     Health:
       type: object
       additionalProperties: false
@@ -60,6 +145,6 @@ components:
           properties:
             code:
               type: string
-              enum: [dependency_unavailable, not_found, method_not_allowed, internal_error]
+              enum: [invalid_input, email_conflict, invalid_credentials, unauthenticated, forbidden, rate_limited, csrf_rejected, dependency_unavailable, not_found, method_not_allowed, internal_error]
             message: {type: string, minLength: 1}
             requestId: {type: string, minLength: 1}

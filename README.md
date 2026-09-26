@@ -12,9 +12,11 @@ make migrate-up
 make run
 ```
 
-默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端用 `curl http://127.0.0.1:8080/healthz` 检查进程，用 `curl http://127.0.0.1:8080/readyz` 检查数据库可用性。按 `Ctrl-C` 关闭服务；`make db-down` 停止数据库并保留数据卷。目前只有工程底座和探针，没有业务接口。
+默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端用 `curl http://127.0.0.1:8080/healthz` 检查进程，用 `curl http://127.0.0.1:8080/readyz` 检查数据库可用性。按 `Ctrl-C` 关闭服务；`make db-down` 停止数据库并保留数据卷。当前提供健康探针以及邮箱注册、登录、退出和当前用户 API。
 
-配置来自环境变量：`DATABASE_URL`（直接运行二进制时必需）、`HTTP_ADDR`（默认 `:8080`）、`DB_MAX_CONNS`（`4`）、`STARTUP_TIMEOUT`（`5s`）、`READY_TIMEOUT`（`1s`）、`SHUTDOWN_TIMEOUT`（`10s`）。`make run` 和 `make migrate-up` 使用 `DB_URL`，未设置时连接本地开发库。API 启动不会自动运行迁移。
+配置来自环境变量：`DATABASE_URL`（直接运行二进制时必需）、`HTTP_ADDR`（默认 `:8080`）、`DB_MAX_CONNS`（`4`）、`STARTUP_TIMEOUT`（`5s`）、`READY_TIMEOUT`（`1s`）、`SHUTDOWN_TIMEOUT`（`10s`）和 `AUTH_COOKIE_SECURE`（默认 `true`）。`make run` 和 `make migrate-up` 使用 `DB_URL`，未设置时连接本地开发库。API 启动不会自动运行迁移。本地纯 HTTP 开发需要设置 `AUTH_COOKIE_SECURE=false`；生产必须通过 HTTPS 使用默认安全 Cookie。
+
+认证使用同源服务端 Cookie Session。注册和登录请求必须是 JSON，并携带 `X-PlayPair-Request: 1`；前端应通过同一 origin 的 `/api` 访问后端。浏览器 Cookie 为 `HttpOnly`、`SameSite=Lax`，固定七天到期；退出只撤销当前会话。当前邮箱只作为登录标识，不代表已经验证归属。
 
 检查与生成：
 
@@ -38,18 +40,23 @@ make test-smoke
 
 ## 项目架构
 
-这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。当前只有探针请求；业务用例尚未接入。
+这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。`internal/auth` 负责密码和服务端会话生命周期；其他业务模块只接收认证后的用户身份。
+
+`users` 保存业务可引用的用户身份；`password_credentials` 以 `user_id` 为主键，一对一保存密码哈希和更新时间。注册在同一事务中写入用户、密码凭据和 session；登录通过邮箱联表读取凭据，session 验证仅查询 `sessions` 和 `users`，不读取密码哈希。
+
+未合并的 `00002_auth.sql` 已直接调整为上述结构。已执行旧版 00002 的开发数据库不会因再次运行 `migrate-up` 自动更新；验证本分支时应使用新建的独立测试库，不要直接重置已有数据。
 
 | 位置                | 职责                                        |
 | ------------------- | ------------------------------------------- |
 | `cmd/playpair-api/` | 进程入口、信号处理和退出状态                |
 | `internal/app/`     | 装配 HTTP 与数据库、管理启动和有界关闭      |
 | `internal/api/`     | Gin 路由、探针、request ID 和 HTTP 错误映射 |
+| `internal/auth/`    | 用户凭据、密码哈希和服务端会话生命周期      |
 | `internal/config/`  | 启动时解析并校验环境配置                    |
 | `internal/db/`      | PostgreSQL 连接池、健康查询和 sqlc 生成代码 |
 | `api/`、`db/`       | HTTP 契约、迁移和 SQL 查询的源文件          |
 
-`Makefile` 是本地命令入口，`.github/workflows/backend.yml` 执行相同的基础与数据库检查。后续业务包按实施计划直接放在 `internal/` 下，由 `internal/app` 装配；生成类型不进入业务逻辑。
+`Makefile` 是本地命令入口，`.github/workflows/pr.yml` 执行基础检查，`.github/workflows/main.yml` 执行数据库、race 和 smoke 检查。后续业务包按实施计划直接放在 `internal/` 下，由 `internal/app` 装配；生成类型不进入业务逻辑。
 
 ## 文档索引
 
