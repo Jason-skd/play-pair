@@ -9,12 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Jason-skd/play-pair/internal/auth"
 	"github.com/gin-gonic/gin"
 )
 
 func TestAuthenticationAbortsHandler(t *testing.T) {
-	s := &server{auth: auth.New(newAuthRepo(), nil)}
+	s := &server{services: newServices(newAuthRepo(), nil)}
 	r := gin.New()
 	called := false
 	r.GET("/protected", s.requireUser(), func(c *gin.Context) { called = true })
@@ -26,7 +25,7 @@ func TestAuthenticationAbortsHandler(t *testing.T) {
 }
 
 func TestPublicRoutesAndIdempotentLogout(t *testing.T) {
-	r := New(func(context.Context) error { return nil }, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), auth.New(newAuthRepo(), nil), true)
+	r := New(func(context.Context) error { return nil }, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), newServices(newAuthRepo(), nil), true)
 	for _, path := range []string{"/healthz", "/readyz"} {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))

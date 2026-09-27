@@ -7,17 +7,29 @@ import (
 	"time"
 
 	"github.com/Jason-skd/play-pair/internal/api/generated"
-	"github.com/Jason-skd/play-pair/internal/auth"
+	"github.com/Jason-skd/play-pair/internal/credentials"
+	"github.com/Jason-skd/play-pair/internal/session"
+	"github.com/Jason-skd/play-pair/internal/users"
 	"github.com/gin-gonic/gin"
 )
 
 // HealthCheck checks dependency readiness within the caller's context.
 type HealthCheck func(context.Context) error
+
+// UserReader composes display and login data for the existing HTTP identity view.
+type UserReader interface {
+	UserDetails(context.Context, users.ID) (email, displayName string, err error)
+}
+type Services struct {
+	Credentials *credentials.Service
+	Sessions    *session.Service
+	Users       UserReader
+}
 type server struct {
 	check        HealthCheck
 	timeout      time.Duration
 	log          *slog.Logger
-	auth         *auth.Service
+	services     Services
 	secureCookie bool
 	limits       *limiter
 }
@@ -25,8 +37,8 @@ type server struct {
 // New assembles HTTP routes and request middleware. The caller owns the check,
 // logger, and authentication service and must keep them valid while serving.
 // A true secureCookie requires HTTPS for browsers to return session cookies.
-func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, authService *auth.Service, secureCookie bool) *gin.Engine {
-	s := &server{check: check, timeout: timeout, log: logger, auth: authService, secureCookie: secureCookie, limits: newLimiter(10000)}
+func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, services Services, secureCookie bool) *gin.Engine {
+	s := &server{check: check, timeout: timeout, log: logger, services: services, secureCookie: secureCookie, limits: newLimiter(10000)}
 	r := gin.New()
 	_ = r.SetTrustedProxies(nil)
 	r.HandleMethodNotAllowed = true

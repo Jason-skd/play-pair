@@ -12,6 +12,14 @@ type PasswordCredential struct {
 	UserID       pgtype.UUID
 	PasswordHash string
 	UpdatedAt    pgtype.Timestamptz
+	Email        string
+}
+
+type Profile struct {
+	UserID      pgtype.UUID
+	DisplayName string
+	Nickname    pgtype.Text
+	Version     int64
 }
 
 type Session struct {
@@ -22,8 +30,6 @@ type Session struct {
 }
 
 type User struct {
-	ID          pgtype.UUID
-	Email       string
-	DisplayName string
-	CreatedAt   pgtype.Timestamptz
+	ID        pgtype.UUID
+	CreatedAt pgtype.Timestamptz
 }

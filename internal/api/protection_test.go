@@ -27,7 +27,7 @@ func TestWriteProtections(t *testing.T) {
 			t.Run(path+"/"+tc.name, func(t *testing.T) {
 				var logs bytes.Buffer
 				// Nil auth turns accidental fallthrough into a 500, making abort ordering observable.
-				r := New(nil, time.Second, slog.New(slog.NewTextHandler(&logs, nil)), nil, true)
+				r := New(nil, time.Second, slog.New(slog.NewTextHandler(&logs, nil)), Services{}, true)
 				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
 				req.Header.Set("Content-Type", "application/json")
 				if tc.header != "" {
@@ -62,7 +62,7 @@ func TestJSONProtections(t *testing.T) {
 		} {
 			t.Run(path+"/"+tc.name, func(t *testing.T) {
 				var logs bytes.Buffer
-				r := New(nil, time.Second, slog.New(slog.NewTextHandler(&logs, nil)), nil, true)
+				r := New(nil, time.Second, slog.New(slog.NewTextHandler(&logs, nil)), Services{}, true)
 				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(tc.body))
 				req.Header.Set("Content-Type", tc.contentType)
 				req.Header.Set("X-PlayPair-Request", "1")
@@ -85,7 +85,7 @@ func TestFailureLogsRedactDetails(t *testing.T) {
 				panic(secret)
 			}
 			return &secretError{secret}
-		}, time.Second, slog.New(slog.NewTextHandler(&logs, nil)), nil, true)
+		}, time.Second, slog.New(slog.NewTextHandler(&logs, nil)), Services{}, true)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 		if w.Code != 500 || strings.Contains(w.Body.String(), secret) || strings.Contains(logs.String(), secret) {

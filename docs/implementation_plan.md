@@ -54,7 +54,11 @@ Proposal v4 是产品范围和用户可见行为的上位来源；本文把其�
 cmd/playpair-api/           进程入口；只调用 internal/app，不承载业务逻辑
 internal/app/                组合根、生命周期和依赖装配
 internal/api/                Gin router、HTTP middleware、handler 和协议映射
-internal/user/               用户、偏好；domain/logic/dto/ports 作为同一业务包内的文件
+internal/users/              账号身份
+internal/credentials/        登录邮箱、密码凭据、注册与登录用例
+internal/session/            会话签发、校验和撤销
+internal/profile/            显示名、昵称与独立资料版本
+internal/preference/         软偏好、硬约束默认值与独立偏好版本
 internal/group/              小组、成员关系；domain/logic/dto/ports
 internal/outing/             outing、邀请、成员输入；domain/logic/dto/ports
 internal/catalog/            固定目录及版本；domain/logic/dto/ports
@@ -156,9 +160,10 @@ Gin 解决入站请求的路由和响应，不是通用的出站 API 客户端�
 
 ### 4.1 核心实体
 
-- `User`：用户身份、邮箱、显示名、创建时间，不包含密码或会话状态。
-- `PasswordCredential`：与用户一对一的密码凭据，独立保存密码哈希和更新时间。注册在同一事务中创建用户、凭据和会话；密码登录联表读取凭据，session 验证只查询会话和用户。
-- `PreferenceProfile`：用户持续维护的软偏好、可作为 outing 接受快捷填入项的个人硬约束默认值、显示名和可选昵称/外号。软偏好不要求每次接受邀请时重填；硬约束默认值只有在接受具体邀请时向用户展示并经明确确认后，才成为该 outing 的输入。推荐文本使用用户配置的昵称/外号优先，未配置时使用显示名。
+- `User`：账号身份和创建时间，不包含登录邮箱、展示资料、密码或会话状态。
+- `Profile`：显示名、可选昵称和独立版本；与 preference 分别维护。
+- `PasswordCredential`：与用户一对一的密码凭据，独立保存登录邮箱、密码哈希和更新时间。注册在同一事务中创建用户、凭据、资料和会话；密码登录联表读取凭据，session 验证只查询会话和用户。
+- `PreferenceProfile`：用户持续维护的软偏好、可作为 outing 接受快捷填入项的个人硬约束默认值。软偏好不要求每次接受邀请时重填；硬约束默认值只有在接受具体邀请时向用户展示并经明确确认后，才成为该 outing 的输入。推荐文本从独立 Profile 获取展示资料，昵称/外号优先，未配置时使用显示名。
 - `Group`：小组标识、名称、加入码及创建者。
 - `GroupMembership`：用户与小组的关系、角色（initiator/member）、状态和加入时间。
 - `Outing`：小组下的活动协调实例、创建者、目标日期范围、Alpha 中发起者选择的活动时长、状态和确认方案；时间字段以数据库中的 UTC 瞬时点表示。Beta 的活动时长可以由每个候选的目录活动建议，不能假设所有候选共享一个时长。

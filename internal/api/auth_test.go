@@ -16,65 +16,69 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Jason-skd/play-pair/internal/auth"
+	"github.com/Jason-skd/play-pair/internal/credentials"
 	"github.com/Jason-skd/play-pair/internal/errs"
+	"github.com/Jason-skd/play-pair/internal/session"
+	"github.com/Jason-skd/play-pair/internal/users"
 	"github.com/gin-gonic/gin"
 )
 
 type authRepo struct {
 	mu       sync.Mutex
-	users    map[string]auth.PasswordCredential
-	sessions map[[32]byte]auth.User
+	users    map[string]credentials.Registration
+	sessions map[[32]byte]users.Account
 	expires  map[[32]byte]time.Time
 	lookups  int
 	findErr  error
 }
 
 func newAuthRepo() *authRepo {
-	return &authRepo{users: map[string]auth.PasswordCredential{}, sessions: map[[32]byte]auth.User{}, expires: map[[32]byte]time.Time{}}
+	return &authRepo{users: map[string]credentials.Registration{}, sessions: map[[32]byte]users.Account{}, expires: map[[32]byte]time.Time{}}
 }
-func (r *authRepo) Register(_ context.Context, u auth.PasswordCredential, h [32]byte, exp time.Time) error {
+func (r *authRepo) Register(_ context.Context, u credentials.Registration, record session.Record) error {
+	h, exp := record.TokenHash, record.ExpiresAt
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, ok := r.users[u.Email]; ok {
-		return auth.ErrEmailConflict
+		return credentials.ErrEmailConflict
 	}
 	r.users[u.Email] = u
-	r.sessions[h] = u.User
+	r.sessions[h] = u.Account
 	r.expires[h] = exp
 	return nil
 }
-func (r *authRepo) FindPasswordCredentialByEmail(_ context.Context, email string) (auth.PasswordCredential, error) {
+func (r *authRepo) FindPasswordCredentialByEmail(_ context.Context, email string) (credentials.PasswordCredential, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	u, ok := r.users[email]
 	if !ok {
-		return auth.PasswordCredential{}, auth.ErrNotFound
+		return credentials.PasswordCredential{}, credentials.ErrNotFound
 	}
-	return u, nil
+	return u.PasswordCredential, nil
 }
-func (r *authRepo) CreateSession(_ context.Context, id string, h [32]byte, _ time.Time, exp time.Time) error {
+func (r *authRepo) CreateSession(_ context.Context, record session.Record) error {
+	id, h, exp := record.UserID, record.TokenHash, record.ExpiresAt
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, u := range r.users {
 		if u.ID == id {
-			r.sessions[h] = u.User
+			r.sessions[h] = u.Account
 			r.expires[h] = exp
 			return nil
 		}
 	}
-	return auth.ErrNotFound
+	return credentials.ErrNotFound
 }
-func (r *authRepo) FindSessionUser(_ context.Context, h [32]byte, now time.Time) (auth.User, error) {
+func (r *authRepo) FindSessionUser(_ context.Context, h [32]byte, now time.Time) (users.Account, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.lookups++
 	if r.findErr != nil {
-		return auth.User{}, r.findErr
+		return users.Account{}, r.findErr
 	}
 	u, ok := r.sessions[h]
 	if !ok || !r.expires[h].After(now) {
-		return auth.User{}, auth.ErrNotFound
+		return users.Account{}, session.ErrNotFound
 	}
 	return u, nil
 }
@@ -88,7 +92,7 @@ func (r *authRepo) DeleteSession(_ context.Context, h [32]byte) error {
 
 func TestAuthenticationHTTPFlow(t *testing.T) {
 	repo := newAuthRepo()
-	router := New(func(context.Context) error { return nil }, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), auth.New(repo, time.Now), false)
+	router := New(func(context.Context) error { return nil }, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), newServices(repo, time.Now), false)
 	ts := httptest.NewServer(router)
 	defer ts.Close()
 	jar1, _ := cookiejar.New(nil)
@@ -140,7 +144,7 @@ func TestAuthenticationHTTPFlow(t *testing.T) {
 }
 
 func TestAuthenticationHTTPRejections(t *testing.T) {
-	router := New(func(context.Context) error { return nil }, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), auth.New(newAuthRepo(), time.Now), false)
+	router := New(func(context.Context) error { return nil }, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), newServices(newAuthRepo(), time.Now), false)
 	ts := httptest.NewServer(router)
 	defer ts.Close()
 	client := ts.Client()
@@ -173,7 +177,7 @@ func TestAuthenticationHTTPRejections(t *testing.T) {
 }
 
 func TestLoginRateLimit(t *testing.T) {
-	router := New(func(context.Context) error { return nil }, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), auth.New(newAuthRepo(), time.Now), false)
+	router := New(func(context.Context) error { return nil }, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), newServices(newAuthRepo(), time.Now), false)
 	ts := httptest.NewServer(router)
 	defer ts.Close()
 	for i := 0; i < 11; i++ {
@@ -189,7 +193,7 @@ func TestLoginRateLimit(t *testing.T) {
 }
 
 func TestLoginRateLimitNormalizesEmail(t *testing.T) {
-	r := New(nil, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), auth.New(newAuthRepo(), time.Now), false)
+	r := New(nil, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)), newServices(newAuthRepo(), time.Now), false)
 	for i := 0; i <= loginEmailLimit; i++ {
 		body := `{"email":"same@example.com","password":"correct horse battery"}`
 		if i%2 == 0 {
@@ -232,8 +236,8 @@ func TestMeAuthenticationBoundary(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := newAuthRepo()
-			service := auth.New(repo, func() time.Time { return now })
-			user, token, _, err := service.Register(context.Background(), "user@example.com", "correct horse battery", "User")
+			service := newServices(repo, func() time.Time { return now })
+			user, token, _, err := service.Credentials.Register(context.Background(), "user@example.com", "correct horse battery", "User")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -263,7 +267,7 @@ func TestMeAuthenticationBoundary(t *testing.T) {
 			if tc.wantCode != "" && !strings.Contains(w.Body.String(), `"code":"`+tc.wantCode+`"`) {
 				t.Fatal(w.Body.String())
 			}
-			if tc.wantCode == "" && !strings.Contains(w.Body.String(), user.ID) {
+			if tc.wantCode == "" && !strings.Contains(w.Body.String(), string(user.ID)) {
 				t.Fatal(w.Body.String())
 			}
 			if strings.Contains(w.Body.String(), token) || strings.Contains(logs.String(), token) || strings.Contains(logs.String(), "secret") {
@@ -312,5 +316,20 @@ func readBody(resp *http.Response) string {
 	return string(b)
 }
 
-var _ auth.Repository = (*authRepo)(nil)
+var _ credentials.Repository = (*authRepo)(nil)
 var _ = errors.Is
+
+func newServices(repo *authRepo, now func() time.Time) Services {
+	sessions := session.New(repo, now)
+	return Services{Credentials: credentials.New(repo, sessions, now), Sessions: sessions, Users: repo}
+}
+func (r *authRepo) UserDetails(_ context.Context, id users.ID) (string, string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, u := range r.users {
+		if u.ID == id {
+			return u.Email, u.DisplayName, nil
+		}
+	}
+	return "", "", credentials.ErrNotFound
+}

@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/Jason-skd/play-pair/internal/api/generated"
-	"github.com/Jason-skd/play-pair/internal/auth"
+	"github.com/Jason-skd/play-pair/internal/credentials"
+	"github.com/Jason-skd/play-pair/internal/session"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,14 +36,14 @@ func (s *server) Register(c *gin.Context, params generated.RegisterParams) {
 	if !s.allow(c, "register:ip:"+c.ClientIP(), registerWindow, registerIPLimit) {
 		return
 	}
-	u, token, expires, err := s.auth.Register(c.Request.Context(), body.Email, body.Password, body.DisplayName)
+	u, token, expires, err := s.services.Credentials.Register(c.Request.Context(), body.Email, body.Password, body.DisplayName)
 	if err != nil {
 		s.authFailure(c, err)
 		return
 	}
 	s.setSession(c, token, expires)
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusCreated, userResponse(u))
+	s.respondUser(c, http.StatusCreated, u)
 }
 
 // Login verifies credentials and issues an independent session cookie.
@@ -58,14 +59,14 @@ func (s *server) Login(c *gin.Context, params generated.LoginParams) {
 	if !s.allow(c, "login:ip:"+c.ClientIP(), loginWindow, loginIPLimit) || !s.allow(c, "login:email:"+strings.ToLower(strings.TrimSpace(body.Email)), loginWindow, loginEmailLimit) {
 		return
 	}
-	u, token, expires, err := s.auth.Login(c.Request.Context(), body.Email, body.Password)
+	u, token, expires, err := s.services.Credentials.Login(c.Request.Context(), body.Email, body.Password)
 	if err != nil {
 		s.authFailure(c, err)
 		return
 	}
 	s.setSession(c, token, expires)
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, userResponse(u))
+	s.respondUser(c, http.StatusOK, u)
 }
 
 // Logout revokes the presented session; missing and malformed cookies succeed.
@@ -75,7 +76,7 @@ func (s *server) Logout(c *gin.Context, params generated.LogoutParams) {
 		return
 	}
 	token, _ := c.Cookie(sessionCookie)
-	if err := s.auth.Logout(c.Request.Context(), token); err != nil {
+	if err := s.services.Sessions.Logout(c.Request.Context(), token); err != nil {
 		s.authFailure(c, err)
 		return
 	}
@@ -95,7 +96,7 @@ func (s *server) allow(c *gin.Context, key string, window time.Duration, limit i
 }
 
 func (s *server) setSession(c *gin.Context, token string, expires time.Time) {
-	http.SetCookie(c.Writer, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", Expires: expires, MaxAge: int(auth.SessionDuration.Seconds()), HttpOnly: true, Secure: s.secureCookie, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(c.Writer, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", Expires: expires, MaxAge: int(session.Duration.Seconds()), HttpOnly: true, Secure: s.secureCookie, SameSite: http.SameSiteLaxMode})
 }
 func (s *server) clearSession(c *gin.Context) {
 	http.SetCookie(c.Writer, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.secureCookie, SameSite: http.SameSiteLaxMode})
@@ -103,13 +104,13 @@ func (s *server) clearSession(c *gin.Context) {
 
 func (s *server) authFailure(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, auth.ErrInvalidInput):
+	case errors.Is(err, credentials.ErrInvalidInput):
 		writeError(c, 400, generated.InvalidInput, "Invalid input")
-	case errors.Is(err, auth.ErrEmailConflict):
+	case errors.Is(err, credentials.ErrEmailConflict):
 		writeError(c, 409, generated.EmailConflict, "Email already registered")
-	case errors.Is(err, auth.ErrInvalidCredentials):
+	case errors.Is(err, credentials.ErrInvalidCredentials):
 		writeError(c, 401, generated.InvalidCredentials, "Invalid credentials")
-	case errors.Is(err, auth.ErrUnauthenticated):
+	case errors.Is(err, session.ErrUnauthenticated):
 		writeError(c, 401, generated.Unauthenticated, "Authentication required")
 	default:
 		s.failure(c, err)

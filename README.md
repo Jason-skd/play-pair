@@ -40,18 +40,20 @@ make test-smoke
 
 ## 项目架构
 
-这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。`internal/auth` 负责密码和服务端会话生命周期；其他业务模块只接收认证后的用户身份。
+这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。`internal/users` 管理账号身份，`internal/credentials` 管理注册登录与密码凭据，`internal/session` 管理会话，`internal/profile` 管理展示资料；其他业务模块只接收认证后的账号身份。
 
-`users` 保存业务可引用的用户身份；`password_credentials` 以 `user_id` 为主键，一对一保存密码哈希和更新时间。注册在同一事务中写入用户、密码凭据和 session；登录通过邮箱联表读取凭据，session 验证仅查询 `sessions` 和 `users`，不读取密码哈希。
+`users` 仅保存账号 ID 和创建时间；`password_credentials` 保存登录邮箱、密码哈希与更新时间；`profiles` 保存显示名、可选昵称和独立版本。注册在同一事务中创建账号、凭据、资料和 session。会话验证只读取 `sessions` 与 `users`；现有注册、登录和 `/me` 响应使用独立读取投影组合邮箱与显示名，不在认证查询中读取资料或密码。
 
-未合并的 `00002_auth.sql` 已直接调整为上述结构。已执行旧版 00002 的开发数据库不会因再次运行 `migrate-up` 自动更新；验证本分支时应使用新建的独立测试库，不要直接重置已有数据。
+`00003_account_modules.sql` 从已合并的 00002 迁移现有数据，保留账号、密码哈希和会话。发现缺失密码凭据的账号时迁移会拒绝执行，需先修复数据；不要重置开发库绕过检查。曾运行过未合并旧版 00002 的数据库仍需先核对其 schema 与已合并版本一致。
 
 | 位置                | 职责                                        |
 | ------------------- | ------------------------------------------- |
 | `cmd/playpair-api/` | 进程入口、信号处理和退出状态                |
 | `internal/app/`     | 装配 HTTP 与数据库、管理启动和有界关闭      |
 | `internal/api/`     | Gin 路由、探针、request ID 和 HTTP 错误映射 |
-| `internal/auth/`    | 用户凭据、密码哈希和服务端会话生命周期      |
+| `internal/users/`、`internal/credentials/` | 账号身份、注册登录及密码凭据 |
+| `internal/session/` | 会话签发、认证、到期与撤销 |
+| `internal/profile/` | 个性化展示资料 |
 | `internal/config/`  | 启动时解析并校验环境配置                    |
 | `internal/db/`      | PostgreSQL 连接池、健康查询和 sqlc 生成代码 |
 | `api/`、`db/`       | HTTP 契约、迁移和 SQL 查询的源文件          |
