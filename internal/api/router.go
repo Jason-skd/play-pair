@@ -8,6 +8,7 @@ import (
 
 	"github.com/Jason-skd/play-pair/internal/api/generated"
 	"github.com/Jason-skd/play-pair/internal/credentials"
+	"github.com/Jason-skd/play-pair/internal/profile"
 	"github.com/Jason-skd/play-pair/internal/session"
 	"github.com/Jason-skd/play-pair/internal/users"
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,7 @@ type UserReader interface {
 	UserDetails(context.Context, users.ID) (email, displayName string, err error)
 }
 type Services struct {
+	Profiles    *profile.Service
 	Credentials *credentials.Service
 	Sessions    *session.Service
 	Users       UserReader
@@ -53,6 +55,8 @@ func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, services
 	r.POST("/api/v1/auth/register", wrapper.Register)
 	r.POST("/api/v1/auth/login", wrapper.Login)
 	r.POST("/api/v1/auth/logout", wrapper.Logout)
+	r.GET("/api/v1/profile", s.requireUser(), wrapper.GetProfile)
+	r.PUT("/api/v1/profile", s.requireUser(), wrapper.PutProfile)
 	r.GET("/api/v1/me", s.requireUser(), wrapper.Me)
 	r.GET("/healthz", wrapper.Health)
 	r.GET("/readyz", wrapper.Ready)

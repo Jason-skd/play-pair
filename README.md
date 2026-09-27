@@ -12,11 +12,13 @@ make migrate-up
 make run
 ```
 
-默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端用 `curl http://127.0.0.1:8080/healthz` 检查进程，用 `curl http://127.0.0.1:8080/readyz` 检查数据库可用性。按 `Ctrl-C` 关闭服务；`make db-down` 停止数据库并保留数据卷。当前提供健康探针以及邮箱注册、登录、退出和当前用户 API。
+默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端用 `curl http://127.0.0.1:8080/healthz` 检查进程，用 `curl http://127.0.0.1:8080/readyz` 检查数据库可用性。按 `Ctrl-C` 关闭服务；`make db-down` 停止数据库并保留数据卷。当前提供健康探针以及邮箱注册、登录、退出、当前用户及个人资料 API。
 
 配置来自环境变量：`DATABASE_URL`（直接运行二进制时必需）、`HTTP_ADDR`（默认 `:8080`）、`DB_MAX_CONNS`（`4`）、`STARTUP_TIMEOUT`（`5s`）、`READY_TIMEOUT`（`1s`）、`SHUTDOWN_TIMEOUT`（`10s`）和 `AUTH_COOKIE_SECURE`（默认 `true`）。`make run` 和 `make migrate-up` 使用 `DB_URL`，未设置时连接本地开发库。API 启动不会自动运行迁移。本地纯 HTTP 开发需要设置 `AUTH_COOKIE_SECURE=false`；生产必须通过 HTTPS 使用默认安全 Cookie。
 
 认证使用同源服务端 Cookie Session。注册和登录请求必须是 JSON，并携带 `X-PlayPair-Request: 1`；前端应通过同一 origin 的 `/api` 访问后端。浏览器 Cookie 为 `HttpOnly`、`SameSite=Lax`，固定七天到期；退出只撤销当前会话。当前邮箱只作为登录标识，不代表已经验证归属。
+
+个人资料使用 `GET/PUT /api/v1/profile`。PUT 为完整替换，必须包含 `displayName`、`nickname`（允许 `null`）和 `expectedVersion`；昵称空白归一化为 `null`，展示时优先昵称，否则显示名。显示名和非空昵称最多 80 个 Unicode 字符。版本从 1 开始，旧版本保存返回 `409 version_conflict`，客户端应重新读取后决定如何修改。请求身份只取 session，不接受目标 user ID。GET 和 PUT 均禁止缓存，PUT 沿用写请求防护。
 
 检查与生成：
 

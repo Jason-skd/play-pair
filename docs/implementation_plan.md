@@ -298,6 +298,7 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 | 能力 | 接口摘要 | 主要后端责任 |
 |---|---|---|
 | 认证 | `POST /api/v1/auth/register`、`/login`、`/logout`、`GET /me` | 身份、session、错误映射 |
+| 展示资料 | `GET /api/v1/profile`、`PUT /api/v1/profile` | 显示名、可选昵称与独立版本；昵称优先 |
 | 偏好 | `GET /preferences`、`PUT /preferences` | 维护软偏好和可用于接受邀请快捷填入的硬约束默认值 |
 | 小组 | `POST /groups`、`POST /groups/{id}/join`、`GET /groups/{id}` | 加入码、成员权限、角色 |
 | outing | `POST /groups/{id}/outings`、`GET /outings/{id}` | 创建、读取、状态检查和发起者选择活动时长 |

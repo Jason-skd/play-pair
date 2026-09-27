@@ -26,6 +26,7 @@ const (
 	NotFound              ErrorResponseErrorCode = "not_found"
 	RateLimited           ErrorResponseErrorCode = "rate_limited"
 	Unauthenticated       ErrorResponseErrorCode = "unauthenticated"
+	VersionConflict       ErrorResponseErrorCode = "version_conflict"
 )
 
 // Valid indicates whether the value is a known member of the ErrorResponseErrorCode enum.
@@ -52,6 +53,8 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	case RateLimited:
 		return true
 	case Unauthenticated:
+		return true
+	case VersionConflict:
 		return true
 	default:
 		return false
@@ -133,6 +136,21 @@ func (e RegisterParamsXPlayPairRequest) Valid() bool {
 	}
 }
 
+// Defines values for PutProfileParamsXPlayPairRequest.
+const (
+	PutProfileParamsXPlayPairRequestN1 PutProfileParamsXPlayPairRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the PutProfileParamsXPlayPairRequest enum.
+func (e PutProfileParamsXPlayPairRequest) Valid() bool {
+	switch e {
+	case PutProfileParamsXPlayPairRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error struct {
@@ -159,11 +177,25 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// Profile defines model for Profile.
+type Profile struct {
+	DisplayName string  `json:"displayName"`
+	Nickname    *string `json:"nickname"`
+	Version     int64   `json:"version"`
+}
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	DisplayName string `json:"displayName"`
 	Email       string `json:"email"`
 	Password    string `json:"password"`
+}
+
+// UpdateProfile defines model for UpdateProfile.
+type UpdateProfile struct {
+	DisplayName     string  `json:"displayName"`
+	ExpectedVersion int64   `json:"expectedVersion"`
+	Nickname        *string `json:"nickname"`
 }
 
 // User defines model for User.
@@ -210,11 +242,22 @@ type RegisterParams struct {
 // RegisterParamsXPlayPairRequest defines parameters for Register.
 type RegisterParamsXPlayPairRequest string
 
+// PutProfileParams defines parameters for PutProfile.
+type PutProfileParams struct {
+	XPlayPairRequest PutProfileParamsXPlayPairRequest `json:"X-PlayPair-Request"`
+}
+
+// PutProfileParamsXPlayPairRequest defines parameters for PutProfile.
+type PutProfileParamsXPlayPairRequest string
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
+
+// PutProfileJSONRequestBody defines body for PutProfile for application/json ContentType.
+type PutProfileJSONRequestBody = UpdateProfile
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -230,6 +273,12 @@ type ServerInterface interface {
 
 	// (GET /api/v1/me)
 	Me(c *gin.Context)
+
+	// (GET /api/v1/profile)
+	GetProfile(c *gin.Context)
+
+	// (PUT /api/v1/profile)
+	PutProfile(c *gin.Context, params PutProfileParams)
 
 	// (GET /healthz)
 	Health(c *gin.Context)
@@ -389,6 +438,62 @@ func (siw *ServerInterfaceWrapper) Me(c *gin.Context) {
 	siw.Handler.Me(c)
 }
 
+// GetProfile operation middleware
+func (siw *ServerInterfaceWrapper) GetProfile(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetProfile(c)
+}
+
+// PutProfile operation middleware
+func (siw *ServerInterfaceWrapper) PutProfile(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutProfileParams
+
+	headers := c.Request.Header
+
+	// ------------- Required header parameter "X-PlayPair-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-PlayPair-Request")]; found {
+		var XPlayPairRequest PutProfileParamsXPlayPairRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-PlayPair-Request, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-PlayPair-Request", valueList[0], &XPlayPairRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-PlayPair-Request: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XPlayPairRequest = XPlayPairRequest
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter X-PlayPair-Request is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PutProfile(c, params)
+}
+
 // Health operation middleware
 func (siw *ServerInterfaceWrapper) Health(c *gin.Context) {
 
@@ -445,6 +550,8 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/api/v1/auth/register", wrapper.Register)
 	router.POST(options.BaseURL+"/api/v1/auth/login", wrapper.Login)
 	router.POST(options.BaseURL+"/api/v1/auth/logout", wrapper.Logout)
+	router.GET(options.BaseURL+"/api/v1/profile", wrapper.GetProfile)
+	router.PUT(options.BaseURL+"/api/v1/profile", wrapper.PutProfile)
 	router.GET(options.BaseURL+"/api/v1/me", wrapper.Me)
 	router.GET(options.BaseURL+"/healthz", wrapper.Health)
 	router.GET(options.BaseURL+"/readyz", wrapper.Ready)

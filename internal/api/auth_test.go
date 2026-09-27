@@ -18,12 +18,14 @@ import (
 
 	"github.com/Jason-skd/play-pair/internal/credentials"
 	"github.com/Jason-skd/play-pair/internal/errs"
+	"github.com/Jason-skd/play-pair/internal/profile"
 	"github.com/Jason-skd/play-pair/internal/session"
 	"github.com/Jason-skd/play-pair/internal/users"
 	"github.com/gin-gonic/gin"
 )
 
 type authRepo struct {
+	profiles map[users.ID]profile.Profile
 	mu       sync.Mutex
 	users    map[string]credentials.Registration
 	sessions map[[32]byte]users.Account
@@ -33,7 +35,7 @@ type authRepo struct {
 }
 
 func newAuthRepo() *authRepo {
-	return &authRepo{users: map[string]credentials.Registration{}, sessions: map[[32]byte]users.Account{}, expires: map[[32]byte]time.Time{}}
+	return &authRepo{profiles: map[users.ID]profile.Profile{}, users: map[string]credentials.Registration{}, sessions: map[[32]byte]users.Account{}, expires: map[[32]byte]time.Time{}}
 }
 func (r *authRepo) Register(_ context.Context, u credentials.Registration, record session.Record) error {
 	h, exp := record.TokenHash, record.ExpiresAt
@@ -43,6 +45,7 @@ func (r *authRepo) Register(_ context.Context, u credentials.Registration, recor
 		return credentials.ErrEmailConflict
 	}
 	r.users[u.Email] = u
+	r.profiles[u.ID] = profile.Profile{UserID: u.ID, DisplayName: u.DisplayName, Version: 1}
 	r.sessions[h] = u.Account
 	r.expires[h] = exp
 	return nil
@@ -321,14 +324,14 @@ var _ = errors.Is
 
 func newServices(repo *authRepo, now func() time.Time) Services {
 	sessions := session.New(repo, now)
-	return Services{Credentials: credentials.New(repo, sessions, now), Sessions: sessions, Users: repo}
+	return Services{Credentials: credentials.New(repo, sessions, now), Sessions: sessions, Users: repo, Profiles: profile.New(repo)}
 }
 func (r *authRepo) UserDetails(_ context.Context, id users.ID) (string, string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, u := range r.users {
 		if u.ID == id {
-			return u.Email, u.DisplayName, nil
+			return u.Email, r.profiles[id].DisplayName, nil
 		}
 	}
 	return "", "", credentials.ErrNotFound
