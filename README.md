@@ -100,9 +100,8 @@ make test-smoke
   - [小组工作量档案](docs/course-requirement-translation/03-小组工作量档案.md)
   - [项目与期末考试重要日期及成绩构成](docs/course-requirement-translation/04-小组项目与期末考试重要日期及成绩构成.md)
 - [仓库 AI 治理](AGENTS.md)
-- [本仓库独有治理](docs/governance/repository.md)
-- [AI 工作流治理](docs/governance/workflow.md)
-- [通用工程约束](docs/governance/engineering.md)
+- [本仓库独有治理](AGENTS.md#本仓库独有治理)
+- [通用工程约束](AGENTS.md#通用工程约束)
 
 ## 权威来源
 
