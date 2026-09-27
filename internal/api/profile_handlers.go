@@ -6,6 +6,7 @@ import (
 
 	"github.com/Jason-skd/play-pair/internal/api/generated"
 	"github.com/Jason-skd/play-pair/internal/errs"
+	"github.com/Jason-skd/play-pair/internal/preference"
 	"github.com/Jason-skd/play-pair/internal/profile"
 	"github.com/Jason-skd/play-pair/internal/users"
 	"github.com/gin-gonic/gin"
@@ -62,7 +63,7 @@ func profileResponse(p profile.Profile) generated.Profile {
 
 func (s *server) resourceFailure(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, profile.ErrInvalidInput):
+	case errors.Is(err, profile.ErrInvalidInput), errors.Is(err, preference.ErrInvalidInput):
 		writeError(c, 400, generated.InvalidInput, "Invalid input")
 	case errors.Is(err, errs.VersionConflict):
 		writeError(c, 409, generated.VersionConflict, "Resource has changed; reload before saving")

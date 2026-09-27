@@ -136,6 +136,21 @@ func (e RegisterParamsXPlayPairRequest) Valid() bool {
 	}
 }
 
+// Defines values for PutPreferencesParamsXPlayPairRequest.
+const (
+	PutPreferencesParamsXPlayPairRequestN1 PutPreferencesParamsXPlayPairRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the PutPreferencesParamsXPlayPairRequest enum.
+func (e PutPreferencesParamsXPlayPairRequest) Valid() bool {
+	switch e {
+	case PutPreferencesParamsXPlayPairRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PutProfileParamsXPlayPairRequest.
 const (
 	PutProfileParamsXPlayPairRequestN1 PutProfileParamsXPlayPairRequest = "1"
@@ -163,6 +178,12 @@ type ErrorResponse struct {
 // ErrorResponseErrorCode defines model for ErrorResponse.Error.Code.
 type ErrorResponseErrorCode string
 
+// HardDefaults Optional defaults only; saving does not authorize any outing. Currency is CNY, measured in fen.
+type HardDefaults struct {
+	MaxBudgetFen             *int64 `json:"maxBudgetFen"`
+	RequiresWheelchairAccess *bool  `json:"requiresWheelchairAccess"`
+}
+
 // Health defines model for Health.
 type Health struct {
 	Status HealthStatus `json:"status"`
@@ -177,6 +198,14 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// Preference defines model for Preference.
+type Preference struct {
+	// HardDefaults Optional defaults only; saving does not authorize any outing. Currency is CNY, measured in fen.
+	HardDefaults HardDefaults    `json:"hardDefaults"`
+	Soft         SoftPreferences `json:"soft"`
+	Version      int64           `json:"version"`
+}
+
 // Profile defines model for Profile.
 type Profile struct {
 	DisplayName string  `json:"displayName"`
@@ -189,6 +218,22 @@ type RegisterRequest struct {
 	DisplayName string `json:"displayName"`
 	Email       string `json:"email"`
 	Password    string `json:"password"`
+}
+
+// SoftPreferences defines model for SoftPreferences.
+type SoftPreferences struct {
+	Dislikes string `json:"dislikes"`
+	Likes    string `json:"likes"`
+	Neutral  string `json:"neutral"`
+}
+
+// UpdatePreference defines model for UpdatePreference.
+type UpdatePreference struct {
+	ExpectedVersion int64 `json:"expectedVersion"`
+
+	// HardDefaults Optional defaults only; saving does not authorize any outing. Currency is CNY, measured in fen.
+	HardDefaults HardDefaults    `json:"hardDefaults"`
+	Soft         SoftPreferences `json:"soft"`
 }
 
 // UpdateProfile defines model for UpdateProfile.
@@ -242,6 +287,14 @@ type RegisterParams struct {
 // RegisterParamsXPlayPairRequest defines parameters for Register.
 type RegisterParamsXPlayPairRequest string
 
+// PutPreferencesParams defines parameters for PutPreferences.
+type PutPreferencesParams struct {
+	XPlayPairRequest PutPreferencesParamsXPlayPairRequest `json:"X-PlayPair-Request"`
+}
+
+// PutPreferencesParamsXPlayPairRequest defines parameters for PutPreferences.
+type PutPreferencesParamsXPlayPairRequest string
+
 // PutProfileParams defines parameters for PutProfile.
 type PutProfileParams struct {
 	XPlayPairRequest PutProfileParamsXPlayPairRequest `json:"X-PlayPair-Request"`
@@ -255,6 +308,9 @@ type LoginJSONRequestBody = LoginRequest
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
+
+// PutPreferencesJSONRequestBody defines body for PutPreferences for application/json ContentType.
+type PutPreferencesJSONRequestBody = UpdatePreference
 
 // PutProfileJSONRequestBody defines body for PutProfile for application/json ContentType.
 type PutProfileJSONRequestBody = UpdateProfile
@@ -273,6 +329,12 @@ type ServerInterface interface {
 
 	// (GET /api/v1/me)
 	Me(c *gin.Context)
+
+	// (GET /api/v1/preferences)
+	GetPreferences(c *gin.Context)
+
+	// (PUT /api/v1/preferences)
+	PutPreferences(c *gin.Context, params PutPreferencesParams)
 
 	// (GET /api/v1/profile)
 	GetProfile(c *gin.Context)
@@ -438,6 +500,62 @@ func (siw *ServerInterfaceWrapper) Me(c *gin.Context) {
 	siw.Handler.Me(c)
 }
 
+// GetPreferences operation middleware
+func (siw *ServerInterfaceWrapper) GetPreferences(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetPreferences(c)
+}
+
+// PutPreferences operation middleware
+func (siw *ServerInterfaceWrapper) PutPreferences(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutPreferencesParams
+
+	headers := c.Request.Header
+
+	// ------------- Required header parameter "X-PlayPair-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-PlayPair-Request")]; found {
+		var XPlayPairRequest PutPreferencesParamsXPlayPairRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-PlayPair-Request, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-PlayPair-Request", valueList[0], &XPlayPairRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-PlayPair-Request: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XPlayPairRequest = XPlayPairRequest
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter X-PlayPair-Request is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PutPreferences(c, params)
+}
+
 // GetProfile operation middleware
 func (siw *ServerInterfaceWrapper) GetProfile(c *gin.Context) {
 
@@ -552,6 +670,8 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/api/v1/auth/logout", wrapper.Logout)
 	router.GET(options.BaseURL+"/api/v1/profile", wrapper.GetProfile)
 	router.PUT(options.BaseURL+"/api/v1/profile", wrapper.PutProfile)
+	router.GET(options.BaseURL+"/api/v1/preferences", wrapper.GetPreferences)
+	router.PUT(options.BaseURL+"/api/v1/preferences", wrapper.PutPreferences)
 	router.GET(options.BaseURL+"/api/v1/me", wrapper.Me)
 	router.GET(options.BaseURL+"/healthz", wrapper.Health)
 	router.GET(options.BaseURL+"/readyz", wrapper.Ready)

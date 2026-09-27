@@ -42,33 +42,82 @@ func decodeReplacement(c *gin.Context, dst any, required, nullable []string) boo
 	if !decodeJSONLimit(c, &raw, 32<<10) {
 		return false
 	}
+	requiredFields, nullableFields := make(map[string]bool, len(required)), make(map[string]bool, len(nullable))
 	for _, path := range required {
-		value := raw
-		for _, key := range strings.Split(path, ".") {
-			var object map[string]json.RawMessage
-			if json.Unmarshal(value, &object) != nil {
-				value = nil
-				break
-			}
-			value = object[key]
-		}
-		allowNull := false
-		for _, key := range nullable {
-			if key == path {
-				allowNull = true
-				break
-			}
-		}
-		if len(value) == 0 || (!allowNull && bytes.Equal(bytes.TrimSpace(value), []byte("null"))) {
-			writeError(c, 400, generated.InvalidInput, "Missing or null required field")
-			return false
-		}
+		requiredFields[path] = true
+	}
+	for _, path := range nullable {
+		nullableFields[path] = true
+	}
+	if !replacementValue(json.NewDecoder(bytes.NewReader(raw)), "", requiredFields, nullableFields) {
+		writeError(c, 400, generated.InvalidInput, "Missing, duplicate or invalid field")
+		return false
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		writeError(c, 400, generated.InvalidInput, "Invalid request")
 		return false
+	}
+	return true
+}
+
+// replacementValue checks exact names and presence while rejecting duplicate keys.
+// encoding/json's struct decoder alone accepts case-insensitive keys and merges
+// repeated objects, which would make full-replacement semantics ambiguous.
+func replacementValue(dec *json.Decoder, path string, required, nullable map[string]bool) bool {
+	token, err := dec.Token()
+	if err != nil {
+		return false
+	}
+	if token == nil {
+		return nullable[path]
+	}
+	if delim, ok := token.(json.Delim); ok {
+		if delim != '{' {
+			return false
+		}
+		prefix := path
+		if prefix != "" {
+			prefix += "."
+		}
+		seen := map[string]bool{}
+		for dec.More() {
+			token, err := dec.Token()
+			if err != nil {
+				return false
+			}
+			key, ok := token.(string)
+			if !ok {
+				return false
+			}
+			child := prefix + key
+			if seen[child] || !required[child] {
+				return false
+			}
+			seen[child] = true
+			if !replacementValue(dec, child, required, nullable) {
+				return false
+			}
+		}
+		if end, err := dec.Token(); err != nil || end != json.Delim('}') {
+			return false
+		}
+		for key := range required {
+			if suffix, ok := strings.CutPrefix(key, prefix); ok && !strings.Contains(suffix, ".") && !seen[key] {
+				return false
+			}
+		}
+		return true
+	}
+	// Root and nested objects cannot be supplied as primitives.
+	if path == "" {
+		return false
+	}
+	for key := range required {
+		if strings.HasPrefix(key, path+".") {
+			return false
+		}
 	}
 	return true
 }

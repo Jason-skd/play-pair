@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// Register atomically persists the account, credential, profile and initial session.
+// Register atomically persists the account, credential, profile, empty preference and initial session.
 func (db *DB) Register(ctx context.Context, command credentials.Registration, record session.Record) error {
 	if command.ID != record.UserID {
 		return errors.New("registration session identity mismatch")
@@ -41,6 +41,9 @@ func (db *DB) Register(ctx context.Context, command credentials.Registration, re
 	}
 	if err := q.CreateProfile(ctx, generated.CreateProfileParams{UserID: id, DisplayName: command.DisplayName}); err != nil {
 		return dependency("create profile", err)
+	}
+	if err := q.CreatePreference(ctx, id); err != nil {
+		return dependency("create preference", err)
 	}
 	if err := q.CreateSession(ctx, generated.CreateSessionParams{UserID: id, TokenHash: record.TokenHash[:], CreatedAt: timestamp(record.CreatedAt), ExpiresAt: timestamp(record.ExpiresAt)}); err != nil {
 		return dependency("create registration session", err)

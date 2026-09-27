@@ -15,6 +15,16 @@ type PasswordCredential struct {
 	Email        string
 }
 
+type Preference struct {
+	UserID                   pgtype.UUID
+	Likes                    string
+	Neutral                  string
+	Dislikes                 string
+	MaxBudgetFen             pgtype.Int8
+	RequiresWheelchairAccess pgtype.Bool
+	Version                  int64
+}
+
 type Profile struct {
 	UserID      pgtype.UUID
 	DisplayName string

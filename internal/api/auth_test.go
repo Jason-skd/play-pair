@@ -18,6 +18,7 @@ import (
 
 	"github.com/Jason-skd/play-pair/internal/credentials"
 	"github.com/Jason-skd/play-pair/internal/errs"
+	"github.com/Jason-skd/play-pair/internal/preference"
 	"github.com/Jason-skd/play-pair/internal/profile"
 	"github.com/Jason-skd/play-pair/internal/session"
 	"github.com/Jason-skd/play-pair/internal/users"
@@ -25,17 +26,19 @@ import (
 )
 
 type authRepo struct {
-	profiles map[users.ID]profile.Profile
-	mu       sync.Mutex
-	users    map[string]credentials.Registration
-	sessions map[[32]byte]users.Account
-	expires  map[[32]byte]time.Time
-	lookups  int
-	findErr  error
+	preferences map[users.ID]preference.Preference
+	resourceErr error
+	profiles    map[users.ID]profile.Profile
+	mu          sync.Mutex
+	users       map[string]credentials.Registration
+	sessions    map[[32]byte]users.Account
+	expires     map[[32]byte]time.Time
+	lookups     int
+	findErr     error
 }
 
 func newAuthRepo() *authRepo {
-	return &authRepo{profiles: map[users.ID]profile.Profile{}, users: map[string]credentials.Registration{}, sessions: map[[32]byte]users.Account{}, expires: map[[32]byte]time.Time{}}
+	return &authRepo{preferences: map[users.ID]preference.Preference{}, profiles: map[users.ID]profile.Profile{}, users: map[string]credentials.Registration{}, sessions: map[[32]byte]users.Account{}, expires: map[[32]byte]time.Time{}}
 }
 func (r *authRepo) Register(_ context.Context, u credentials.Registration, record session.Record) error {
 	h, exp := record.TokenHash, record.ExpiresAt
@@ -46,6 +49,7 @@ func (r *authRepo) Register(_ context.Context, u credentials.Registration, recor
 	}
 	r.users[u.Email] = u
 	r.profiles[u.ID] = profile.Profile{UserID: u.ID, DisplayName: u.DisplayName, Version: 1}
+	r.preferences[u.ID] = preference.Preference{UserID: u.ID, Version: 1}
 	r.sessions[h] = u.Account
 	r.expires[h] = exp
 	return nil
@@ -324,7 +328,7 @@ var _ = errors.Is
 
 func newServices(repo *authRepo, now func() time.Time) Services {
 	sessions := session.New(repo, now)
-	return Services{Credentials: credentials.New(repo, sessions, now), Sessions: sessions, Users: repo, Profiles: profile.New(repo)}
+	return Services{Credentials: credentials.New(repo, sessions, now), Sessions: sessions, Users: repo, Profiles: profile.New(repo), Preferences: preference.New(repo)}
 }
 func (r *authRepo) UserDetails(_ context.Context, id users.ID) (string, string, error) {
 	r.mu.Lock()

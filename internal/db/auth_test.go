@@ -100,15 +100,16 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 		if err := database.Register(ctx, credential, session.Record{UserID: credential.ID, TokenHash: digest, CreatedAt: now, ExpiresAt: now}); !errors.Is(err, errs.DependencyUnavailable) {
 			t.Fatalf("invalid session expiry: %v", err)
 		}
-		var users, credentials, sessions, profiles int
+		var users, credentials, sessions, profiles, preferences int
 		if err := database.pool.QueryRow(ctx, `SELECT
 			(SELECT count(*) FROM users WHERE id = $1),
 			(SELECT count(*) FROM password_credentials WHERE user_id = $1),
 			(SELECT count(*) FROM sessions WHERE user_id = $1),
- (SELECT count(*) FROM profiles WHERE user_id = $1)`, id).Scan(&users, &credentials, &sessions, &profiles); err != nil {
+ (SELECT count(*) FROM profiles WHERE user_id = $1),
+ (SELECT count(*) FROM preferences WHERE user_id = $1)`, id).Scan(&users, &credentials, &sessions, &profiles, &preferences); err != nil {
 			t.Fatal(err)
 		}
-		if users != 0 || credentials != 0 || sessions != 0 || profiles != 0 {
+		if users != 0 || credentials != 0 || sessions != 0 || profiles != 0 || preferences != 0 {
 			t.Fatalf("partial registration persisted: users=%d credentials=%d sessions=%d", users, credentials, sessions)
 		}
 	})
