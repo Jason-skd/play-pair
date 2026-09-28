@@ -12,17 +12,17 @@ import (
 )
 
 const getProfile = `-- name: GetProfile :one
-SELECT user_id, display_name, nickname, version FROM profiles WHERE user_id = $1
+SELECT display_name, nickname, version, user_id FROM profiles WHERE user_id = $1
 `
 
-func (q *Queries) GetProfile(ctx context.Context, userID pgtype.UUID) (Profile, error) {
+func (q *Queries) GetProfile(ctx context.Context, userID int64) (Profile, error) {
 	row := q.db.QueryRow(ctx, getProfile, userID)
 	var i Profile
 	err := row.Scan(
-		&i.UserID,
 		&i.DisplayName,
 		&i.Nickname,
 		&i.Version,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -30,11 +30,11 @@ func (q *Queries) GetProfile(ctx context.Context, userID pgtype.UUID) (Profile, 
 const updateProfile = `-- name: UpdateProfile :one
 UPDATE profiles SET display_name = $2, nickname = $3, version = version + 1
 WHERE user_id = $1 AND version = $4 AND version < 9223372036854775807
-RETURNING user_id, display_name, nickname, version
+RETURNING display_name, nickname, version, user_id
 `
 
 type UpdateProfileParams struct {
-	UserID      pgtype.UUID
+	UserID      int64
 	DisplayName string
 	Nickname    pgtype.Text
 	Version     int64
@@ -49,10 +49,10 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) (P
 	)
 	var i Profile
 	err := row.Scan(
-		&i.UserID,
 		&i.DisplayName,
 		&i.Nickname,
 		&i.Version,
+		&i.UserID,
 	)
 	return i, err
 }

@@ -16,7 +16,7 @@ INSERT INTO password_credentials (user_id, email, password_hash, updated_at) VAL
 `
 
 type CreatePasswordCredentialParams struct {
-	UserID       pgtype.UUID
+	UserID       int64
 	Email        string
 	PasswordHash string
 	UpdatedAt    pgtype.Timestamptz
@@ -37,7 +37,7 @@ INSERT INTO profiles (user_id, display_name) VALUES ($1, $2)
 `
 
 type CreateProfileParams struct {
-	UserID      pgtype.UUID
+	UserID      int64
 	DisplayName string
 }
 
@@ -52,7 +52,7 @@ INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES ($1, $
 
 type CreateSessionParams struct {
 	TokenHash []byte
-	UserID    pgtype.UUID
+	UserID    int64
 	CreatedAt pgtype.Timestamptz
 	ExpiresAt pgtype.Timestamptz
 }
@@ -67,18 +67,20 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 	return err
 }
 
-const createUser = `-- name: CreateUser :exec
-INSERT INTO users (id, created_at) VALUES ($1, $2)
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (created_at) VALUES ($1) RETURNING id, created_at
 `
 
-type CreateUserParams struct {
-	ID        pgtype.UUID
+type CreateUserRow struct {
+	ID        int64
 	CreatedAt pgtype.Timestamptz
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
-	_, err := q.db.Exec(ctx, createUser, arg.ID, arg.CreatedAt)
-	return err
+func (q *Queries) CreateUser(ctx context.Context, createdAt pgtype.Timestamptz) (CreateUserRow, error) {
+	row := q.db.QueryRow(ctx, createUser, createdAt)
+	var i CreateUserRow
+	err := row.Scan(&i.ID, &i.CreatedAt)
+	return i, err
 }
 
 const deleteSession = `-- name: DeleteSession :execrows
@@ -99,7 +101,7 @@ FROM password_credentials pc JOIN users u ON u.id = pc.user_id WHERE pc.email = 
 `
 
 type FindPasswordCredentialByEmailRow struct {
-	ID           pgtype.UUID
+	ID           int64
 	CreatedAt    pgtype.Timestamptz
 	Email        string
 	PasswordHash string
@@ -127,9 +129,14 @@ type FindSessionUserParams struct {
 	ExpiresAt pgtype.Timestamptz
 }
 
-func (q *Queries) FindSessionUser(ctx context.Context, arg FindSessionUserParams) (User, error) {
+type FindSessionUserRow struct {
+	ID        int64
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error) {
 	row := q.db.QueryRow(ctx, findSessionUser, arg.TokenHash, arg.ExpiresAt)
-	var i User
+	var i FindSessionUserRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }
@@ -145,7 +152,7 @@ type UserDetailsRow struct {
 	DisplayName string
 }
 
-func (q *Queries) UserDetails(ctx context.Context, id pgtype.UUID) (UserDetailsRow, error) {
+func (q *Queries) UserDetails(ctx context.Context, id int64) (UserDetailsRow, error) {
 	row := q.db.QueryRow(ctx, userDetails, id)
 	var i UserDetailsRow
 	err := row.Scan(&i.Email, &i.DisplayName)

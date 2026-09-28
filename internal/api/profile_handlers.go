@@ -17,12 +17,13 @@ func (s *server) resourceActor(c *gin.Context) (users.ID, bool) {
 	u, ok := authenticatedUser(c.Request.Context())
 	if !ok {
 		s.failure(c, errors.New("authenticated user missing from request context"))
-		return "", false
+		return 0, false
 	}
 	c.Header("Cache-Control", "no-store")
 	return u.ID, true
 }
 
+// GetProfile returns display data for the authenticated account only.
 func (s *server) GetProfile(c *gin.Context) {
 	id, ok := s.resourceActor(c)
 	if !ok {
@@ -36,6 +37,7 @@ func (s *server) GetProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, profileResponse(p))
 }
 
+// PutProfile requires a complete replacement and an explicit expected version.
 func (s *server) PutProfile(c *gin.Context, params generated.PutProfileParams) {
 	id, ok := s.resourceActor(c)
 	if !ok {

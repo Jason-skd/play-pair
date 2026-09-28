@@ -3,30 +3,40 @@ package credentials
 import (
 	"context"
 	"errors"
-	"github.com/Jason-skd/play-pair/internal/session"
-	"github.com/Jason-skd/play-pair/internal/users"
 	"testing"
 	"time"
+
+	"github.com/Jason-skd/play-pair/internal/session"
+	"github.com/Jason-skd/play-pair/internal/users"
 )
 
+type registeredUser struct {
+	PasswordCredential
+	DisplayName string
+}
+
 type memoryRepo struct {
-	users    map[string]Registration
+	users    map[string]registeredUser
 	sessions map[[32]byte]users.Account
 	expires  map[[32]byte]time.Time
 }
 
 func newMemory() *memoryRepo {
-	return &memoryRepo{map[string]Registration{}, map[[32]byte]users.Account{}, map[[32]byte]time.Time{}}
+	return &memoryRepo{map[string]registeredUser{}, map[[32]byte]users.Account{}, map[[32]byte]time.Time{}}
 }
-func (m *memoryRepo) Register(_ context.Context, u Registration, record session.Record) error {
+func (m *memoryRepo) Register(_ context.Context, command Registration, record session.Pending) (users.Account, error) {
 	h, exp := record.TokenHash, record.ExpiresAt
-	if _, ok := m.users[u.Email]; ok {
-		return ErrEmailConflict
+	if _, ok := m.users[command.Email]; ok {
+		return users.Account{}, ErrEmailConflict
+	}
+	u := registeredUser{
+		PasswordCredential: PasswordCredential{Account: users.Account{ID: users.ID(len(m.users) + 1), CreatedAt: command.CreatedAt}, Email: command.Email, PasswordHash: command.PasswordHash},
+		DisplayName:        command.DisplayName,
 	}
 	m.users[u.Email] = u
 	m.sessions[h] = u.Account
 	m.expires[h] = exp
-	return nil
+	return u.Account, nil
 }
 func (m *memoryRepo) FindPasswordCredentialByEmail(_ context.Context, e string) (PasswordCredential, error) {
 	u, ok := m.users[e]
@@ -97,5 +107,47 @@ func TestValidationAndCredentials(t *testing.T) {
 	}
 	if _, _, _, err := s.Login(context.Background(), "missing@example.com", "correct horse battery"); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("credentials: %v", err)
+	}
+}
+
+type registrationResultRepo struct {
+	*memoryRepo
+	account users.Account
+	err     error
+	command Registration
+	pending session.Pending
+}
+
+func (r *registrationResultRepo) Register(_ context.Context, c Registration, p session.Pending) (users.Account, error) {
+	r.command, r.pending = c, p
+	return r.account, r.err
+}
+
+func TestRegisterUsesPersistedIdentityAndWithholdsFailedResults(t *testing.T) {
+	now := time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "returned identity"},
+		{name: "failed transaction", err: errors.New("commit failed")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			account := users.Account{ID: 812345678901234567, CreatedAt: now}
+			repo := &registrationResultRepo{memoryRepo: newMemory(), account: account, err: tc.err}
+			clock := func() time.Time { return now }
+			s := New(repo, session.New(repo, clock), clock)
+			got, token, expires, err := s.Register(context.Background(), " User@Example.com ", "correct horse battery", " Name ")
+			if tc.err != nil {
+				if !errors.Is(err, repo.err) || got != (users.Account{}) || token != "" || !expires.IsZero() {
+					t.Fatalf("failed write exposed identity or session: %#v %q %v %v", got, token, expires, err)
+				}
+			} else if err != nil || got != account || token == "" || !expires.Equal(now.Add(session.Duration)) {
+				t.Fatalf("repository identity not returned: %#v %v", got, err)
+			}
+			if repo.command.Email != "user@example.com" || repo.command.DisplayName != "Name" || !repo.command.CreatedAt.Equal(now) || !repo.pending.CreatedAt.Equal(now) || !repo.pending.ExpiresAt.Equal(now.Add(session.Duration)) {
+				t.Fatal("registration data or pending session lost")
+			}
+		})
 	}
 }

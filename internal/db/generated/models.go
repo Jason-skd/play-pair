@@ -9,37 +9,37 @@ import (
 )
 
 type PasswordCredential struct {
-	UserID       pgtype.UUID
 	PasswordHash string
 	UpdatedAt    pgtype.Timestamptz
 	Email        string
+	UserID       int64
 }
 
 type Preference struct {
-	UserID                   pgtype.UUID
 	Likes                    string
 	Neutral                  string
 	Dislikes                 string
 	MaxBudgetFen             pgtype.Int8
 	RequiresWheelchairAccess pgtype.Bool
 	Version                  int64
+	UserID                   int64
 }
 
 type Profile struct {
-	UserID      pgtype.UUID
 	DisplayName string
 	Nickname    pgtype.Text
 	Version     int64
+	UserID      int64
 }
 
 type Session struct {
 	TokenHash []byte
-	UserID    pgtype.UUID
 	CreatedAt pgtype.Timestamptz
 	ExpiresAt pgtype.Timestamptz
+	UserID    int64
 }
 
 type User struct {
-	ID        pgtype.UUID
 	CreatedAt pgtype.Timestamptz
+	ID        int64
 }

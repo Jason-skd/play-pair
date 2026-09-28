@@ -248,7 +248,9 @@ type User struct {
 	CreatedAt   time.Time           `json:"createdAt"`
 	DisplayName string              `json:"displayName"`
 	Email       openapi_types.Email `json:"email"`
-	Id          openapi_types.UUID  `json:"id"`
+
+	// Id Database-generated account identity.
+	Id int64 `json:"id"`
 }
 
 // BrowserWriteHeader defines model for BrowserWriteHeader.

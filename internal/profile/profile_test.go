@@ -24,18 +24,18 @@ func TestReplaceProfile(t *testing.T) {
 	nick := "  昵称  "
 	r := &captureRepo{}
 	s := New(r)
-	p, err := s.Replace(context.Background(), "user", Update{DisplayName: "  显示名 ", Nickname: &nick, ExpectedVersion: 1})
+	p, err := s.Replace(context.Background(), 1, Update{DisplayName: "  显示名 ", Nickname: &nick, ExpectedVersion: 1})
 	if err != nil || p.Name() != "昵称" || p.DisplayName != "显示名" || p.Version != 2 {
 		t.Fatal(p, err)
 	}
 	nick = "  "
-	p, err = s.Replace(context.Background(), "user", Update{DisplayName: "显示名", Nickname: &nick, ExpectedVersion: 2})
+	p, err = s.Replace(context.Background(), 1, Update{DisplayName: "显示名", Nickname: &nick, ExpectedVersion: 2})
 	if err != nil || p.Nickname != nil || p.Name() != "显示名" {
 		t.Fatal(p, err)
 	}
 	for _, command := range []Update{{DisplayName: " ", ExpectedVersion: 1}, {DisplayName: strings.Repeat("中", 81), ExpectedVersion: 1}, {DisplayName: "Name"}, {DisplayName: "\x00", ExpectedVersion: 1}} {
 		before := r.calls
-		if _, err := s.Replace(context.Background(), "user", command); !errors.Is(err, ErrInvalidInput) || r.calls != before {
+		if _, err := s.Replace(context.Background(), 1, command); !errors.Is(err, ErrInvalidInput) || r.calls != before {
 			t.Fatal("invalid data reached repository", err)
 		}
 	}

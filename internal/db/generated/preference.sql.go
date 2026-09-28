@@ -15,26 +15,26 @@ const createPreference = `-- name: CreatePreference :exec
 INSERT INTO preferences (user_id) VALUES ($1)
 `
 
-func (q *Queries) CreatePreference(ctx context.Context, userID pgtype.UUID) error {
+func (q *Queries) CreatePreference(ctx context.Context, userID int64) error {
 	_, err := q.db.Exec(ctx, createPreference, userID)
 	return err
 }
 
 const getPreference = `-- name: GetPreference :one
-SELECT user_id, likes, neutral, dislikes, max_budget_fen, requires_wheelchair_access, version FROM preferences WHERE user_id = $1
+SELECT likes, neutral, dislikes, max_budget_fen, requires_wheelchair_access, version, user_id FROM preferences WHERE user_id = $1
 `
 
-func (q *Queries) GetPreference(ctx context.Context, userID pgtype.UUID) (Preference, error) {
+func (q *Queries) GetPreference(ctx context.Context, userID int64) (Preference, error) {
 	row := q.db.QueryRow(ctx, getPreference, userID)
 	var i Preference
 	err := row.Scan(
-		&i.UserID,
 		&i.Likes,
 		&i.Neutral,
 		&i.Dislikes,
 		&i.MaxBudgetFen,
 		&i.RequiresWheelchairAccess,
 		&i.Version,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -44,11 +44,11 @@ UPDATE preferences
 SET likes = $2, neutral = $3, dislikes = $4, max_budget_fen = $5,
     requires_wheelchair_access = $6, version = version + 1
 WHERE user_id = $1 AND version = $7 AND version < 9223372036854775807
-RETURNING user_id, likes, neutral, dislikes, max_budget_fen, requires_wheelchair_access, version
+RETURNING likes, neutral, dislikes, max_budget_fen, requires_wheelchair_access, version, user_id
 `
 
 type UpdatePreferenceParams struct {
-	UserID                   pgtype.UUID
+	UserID                   int64
 	Likes                    string
 	Neutral                  string
 	Dislikes                 string
@@ -69,13 +69,13 @@ func (q *Queries) UpdatePreference(ctx context.Context, arg UpdatePreferencePara
 	)
 	var i Preference
 	err := row.Scan(
-		&i.UserID,
 		&i.Likes,
 		&i.Neutral,
 		&i.Dislikes,
 		&i.MaxBudgetFen,
 		&i.RequiresWheelchairAccess,
 		&i.Version,
+		&i.UserID,
 	)
 	return i, err
 }

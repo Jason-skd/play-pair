@@ -12,12 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// GetPreference reads saved defaults without authorizing an outing.
 func (db *DB) GetPreference(ctx context.Context, userID users.ID) (preference.Preference, error) {
-	id, err := parseUUID(string(userID))
-	if err != nil {
-		return preference.Preference{}, err
-	}
-	v, err := db.queries.GetPreference(ctx, id)
+	v, err := db.queries.GetPreference(ctx, int64(userID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return preference.Preference{}, errs.NotFound
 	}
@@ -26,11 +23,10 @@ func (db *DB) GetPreference(ctx context.Context, userID users.ID) (preference.Pr
 	}
 	return preferenceResult(v), nil
 }
+
+// UpdatePreference atomically replaces defaults only at the expected version.
+// Explicit pgtype validity preserves the difference between NULL, zero and false.
 func (db *DB) UpdatePreference(ctx context.Context, userID users.ID, c preference.Update) (preference.Preference, error) {
-	id, err := parseUUID(string(userID))
-	if err != nil {
-		return preference.Preference{}, err
-	}
 	budget := pgtype.Int8{}
 	access := pgtype.Bool{}
 	if c.HardDefaults.MaxBudgetFen != nil {
@@ -39,7 +35,7 @@ func (db *DB) UpdatePreference(ctx context.Context, userID users.ID, c preferenc
 	if c.HardDefaults.RequiresWheelchairAccess != nil {
 		access = pgtype.Bool{Bool: *c.HardDefaults.RequiresWheelchairAccess, Valid: true}
 	}
-	v, err := db.queries.UpdatePreference(ctx, generated.UpdatePreferenceParams{UserID: id, Likes: c.Soft.Likes, Neutral: c.Soft.Neutral, Dislikes: c.Soft.Dislikes, MaxBudgetFen: budget, RequiresWheelchairAccess: access, Version: c.ExpectedVersion})
+	v, err := db.queries.UpdatePreference(ctx, generated.UpdatePreferenceParams{UserID: int64(userID), Likes: c.Soft.Likes, Neutral: c.Soft.Neutral, Dislikes: c.Soft.Dislikes, MaxBudgetFen: budget, RequiresWheelchairAccess: access, Version: c.ExpectedVersion})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return preference.Preference{}, errs.VersionConflict
 	}
@@ -49,7 +45,7 @@ func (db *DB) UpdatePreference(ctx context.Context, userID users.ID, c preferenc
 	return preferenceResult(v), nil
 }
 func preferenceResult(v generated.Preference) preference.Preference {
-	p := preference.Preference{UserID: users.ID(uuidString(v.UserID)), Soft: preference.Soft{Likes: v.Likes, Neutral: v.Neutral, Dislikes: v.Dislikes}, Version: v.Version}
+	p := preference.Preference{UserID: users.ID(v.UserID), Soft: preference.Soft{Likes: v.Likes, Neutral: v.Neutral, Dislikes: v.Dislikes}, Version: v.Version}
 	if v.MaxBudgetFen.Valid {
 		budget := v.MaxBudgetFen.Int64
 		p.HardDefaults.MaxBudgetFen = &budget

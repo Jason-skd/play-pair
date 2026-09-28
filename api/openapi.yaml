@@ -231,7 +231,7 @@ components:
       additionalProperties: false
       required: [id, email, displayName, createdAt]
       properties:
-        id: {type: string, format: uuid}
+        id: {type: integer, format: int64, minimum: 1, description: Database-generated account identity.}
         email: {type: string, format: email}
         displayName: {type: string, minLength: 1}
         createdAt: {type: string, format: date-time}

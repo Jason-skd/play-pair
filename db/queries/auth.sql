@@ -1,5 +1,5 @@
--- name: CreateUser :exec
-INSERT INTO users (id, created_at) VALUES ($1, $2);
+-- name: CreateUser :one
+INSERT INTO users (created_at) VALUES ($1) RETURNING id, created_at;
 
 -- name: CreatePasswordCredential :exec
 INSERT INTO password_credentials (user_id, email, password_hash, updated_at) VALUES ($1, $2, $3, $4);

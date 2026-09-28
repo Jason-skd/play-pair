@@ -21,31 +21,47 @@ import (
 )
 
 var (
-	ErrInvalidInput       = errors.New("invalid registration")
-	ErrEmailConflict      = errors.New("email conflict")
+	// ErrInvalidInput identifies invalid registration fields before persistence.
+	ErrInvalidInput = errors.New("invalid registration")
+	// ErrEmailConflict means the normalized email already belongs to an account.
+	ErrEmailConflict = errors.New("email conflict")
+	// ErrInvalidCredentials deliberately does not distinguish unknown email from
+	// a wrong password in the public login result.
 	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrNotFound           = errors.New("credential not found")
+	// ErrNotFound is the repository result for a missing password credential.
+	ErrNotFound = errors.New("credential not found")
 )
 
+// PasswordCredential is the private login projection. Never serialize its hash.
 type PasswordCredential struct {
 	users.Account
 	Email        string
 	PasswordHash string
 }
 
-// Registration contains initial account, credential and display data for one atomic write.
+// Registration contains initial credential and display data for one atomic write.
+// It has no ID: the repository allocates account identity when inserting the user.
 type Registration struct {
-	PasswordCredential
-	DisplayName string
+	Email        string
+	PasswordHash string
+	DisplayName  string
+	CreatedAt    time.Time
 }
+
+// Repository owns the registration transaction. Register returns the database
+// account only after its credentials, profile, preferences and session commit.
 type Repository interface {
-	Register(context.Context, Registration, session.Record) error
+	Register(context.Context, Registration, session.Pending) (users.Account, error)
 	FindPasswordCredentialByEmail(context.Context, string) (PasswordCredential, error)
 }
+
+// SessionIssuer is the session capability needed by registration and login.
 type SessionIssuer interface {
-	Prepare(users.ID) (session.Issued, error)
+	Prepare() (session.Issued, error)
 	Issue(context.Context, users.ID) (session.Issued, error)
 }
+
+// Service validates credentials and orchestrates registration and password login.
 type Service struct {
 	repo      Repository
 	sessions  SessionIssuer
@@ -55,12 +71,17 @@ type Service struct {
 	dummyHash string
 }
 
+// New creates a credentials service with bounded password hashing concurrency.
+// A nil clock uses time.Now.
 func New(repo Repository, sessions SessionIssuer, now func() time.Time) *Service {
 	if now == nil {
 		now = time.Now
 	}
 	return &Service{repo: repo, sessions: sessions, now: now, gate: make(chan struct{}, 2)}
 }
+
+// Register creates an account and its initial session atomically. Failures return
+// neither an account nor a usable token, including failures after ID allocation.
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (users.Account, string, time.Time, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	name, err := profile.NormalizeName(displayName)
@@ -71,20 +92,19 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	if err != nil {
 		return users.Account{}, "", time.Time{}, err
 	}
-	account, err := users.New(s.now())
+	issued, err := s.sessions.Prepare()
 	if err != nil {
 		return users.Account{}, "", time.Time{}, err
 	}
-	issued, err := s.sessions.Prepare(account.ID)
+	command := Registration{Email: email, PasswordHash: hash, DisplayName: name, CreatedAt: s.now().UTC()}
+	account, err := s.repo.Register(ctx, command, issued.Pending)
 	if err != nil {
 		return users.Account{}, "", time.Time{}, err
 	}
-	command := Registration{PasswordCredential: PasswordCredential{Account: account, Email: email, PasswordHash: hash}, DisplayName: name}
-	if err := s.repo.Register(ctx, command, issued.Record); err != nil {
-		return users.Account{}, "", time.Time{}, err
-	}
-	return account, issued.Token, issued.Record.ExpiresAt, nil
+	return account, issued.Token, issued.Pending.ExpiresAt, nil
 }
+
+// Login verifies a password and persists a new, independently revocable session.
 func (s *Service) Login(ctx context.Context, email, password string) (users.Account, string, time.Time, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !validEmail(email) || !validPassword(password) {
@@ -105,7 +125,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (users.Acco
 	if err != nil {
 		return users.Account{}, "", time.Time{}, err
 	}
-	return credential.Account, issued.Token, issued.Record.ExpiresAt, nil
+	return credential.Account, issued.Token, issued.Pending.ExpiresAt, nil
 }
 func validEmail(v string) bool {
 	if len(v) == 0 || len(v) > 254 {

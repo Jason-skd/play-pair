@@ -39,7 +39,7 @@ func TestSessionLifecycleAndFailure(t *testing.T) {
 	now := time.Date(2026, 9, 27, 0, 0, 0, 0, time.UTC)
 	r := &repository{}
 	s := New(r, func() time.Time { return now })
-	issued, err := s.Issue(context.Background(), "account")
+	issued, err := s.Issue(context.Background(), 42)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestSessionLifecycleAndFailure(t *testing.T) {
 		t.Fatal("malformed token queried repository")
 	}
 	r.err = errors.New("write failed")
-	if got, err := s.Issue(context.Background(), "account"); err == nil || got.Token != "" {
+	if got, err := s.Issue(context.Background(), 42); err == nil || got.Token != "" {
 		t.Fatal("failed write exposed session")
 	}
 }

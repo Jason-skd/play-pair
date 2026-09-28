@@ -103,7 +103,7 @@ func TestPreferenceDatabase(t *testing.T) {
 	if _, err := db.pool.Exec(ctx, `INSERT INTO preferences(user_id) VALUES($1)`, id); err == nil {
 		t.Fatal("duplicate preference accepted")
 	}
-	if _, err := db.pool.Exec(ctx, `INSERT INTO preferences(user_id) VALUES($1)`, uuid.NewString()); err == nil {
+	if _, err := db.pool.Exec(ctx, `INSERT INTO preferences(user_id) VALUES($1)`, int64(-1)); err == nil {
 		t.Fatal("orphan preference accepted")
 	}
 	if _, err := db.pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, id); err != nil {

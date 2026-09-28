@@ -7,7 +7,6 @@ import (
 	"github.com/Jason-skd/play-pair/internal/api/generated"
 	"github.com/Jason-skd/play-pair/internal/users"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -32,5 +31,5 @@ func (s *server) respondUser(c *gin.Context, status int, u users.Account) {
 	c.JSON(status, userResponse(u, email, name))
 }
 func userResponse(u users.Account, email, name string) generated.User {
-	return generated.User{Id: openapi_types.UUID(uuid.MustParse(string(u.ID))), Email: openapi_types.Email(email), DisplayName: name, CreatedAt: u.CreatedAt}
+	return generated.User{Id: int64(u.ID), Email: openapi_types.Email(email), DisplayName: name, CreatedAt: u.CreatedAt}
 }

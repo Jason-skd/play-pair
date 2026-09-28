@@ -25,12 +25,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type registeredUser struct {
+	credentials.PasswordCredential
+	DisplayName string
+}
+
 type authRepo struct {
 	preferences map[users.ID]preference.Preference
 	resourceErr error
 	profiles    map[users.ID]profile.Profile
 	mu          sync.Mutex
-	users       map[string]credentials.Registration
+	users       map[string]registeredUser
 	sessions    map[[32]byte]users.Account
 	expires     map[[32]byte]time.Time
 	lookups     int
@@ -38,21 +43,25 @@ type authRepo struct {
 }
 
 func newAuthRepo() *authRepo {
-	return &authRepo{preferences: map[users.ID]preference.Preference{}, profiles: map[users.ID]profile.Profile{}, users: map[string]credentials.Registration{}, sessions: map[[32]byte]users.Account{}, expires: map[[32]byte]time.Time{}}
+	return &authRepo{preferences: map[users.ID]preference.Preference{}, profiles: map[users.ID]profile.Profile{}, users: map[string]registeredUser{}, sessions: map[[32]byte]users.Account{}, expires: map[[32]byte]time.Time{}}
 }
-func (r *authRepo) Register(_ context.Context, u credentials.Registration, record session.Record) error {
+func (r *authRepo) Register(_ context.Context, command credentials.Registration, record session.Pending) (users.Account, error) {
 	h, exp := record.TokenHash, record.ExpiresAt
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.users[u.Email]; ok {
-		return credentials.ErrEmailConflict
+	if _, ok := r.users[command.Email]; ok {
+		return users.Account{}, credentials.ErrEmailConflict
+	}
+	u := registeredUser{
+		PasswordCredential: credentials.PasswordCredential{Account: users.Account{ID: users.ID(len(r.users) + 1), CreatedAt: command.CreatedAt}, Email: command.Email, PasswordHash: command.PasswordHash},
+		DisplayName:        command.DisplayName,
 	}
 	r.users[u.Email] = u
 	r.profiles[u.ID] = profile.Profile{UserID: u.ID, DisplayName: u.DisplayName, Version: 1}
 	r.preferences[u.ID] = preference.Preference{UserID: u.ID, Version: 1}
 	r.sessions[h] = u.Account
 	r.expires[h] = exp
-	return nil
+	return u.Account, nil
 }
 func (r *authRepo) FindPasswordCredentialByEmail(_ context.Context, email string) (credentials.PasswordCredential, error) {
 	r.mu.Lock()
@@ -274,8 +283,13 @@ func TestMeAuthenticationBoundary(t *testing.T) {
 			if tc.wantCode != "" && !strings.Contains(w.Body.String(), `"code":"`+tc.wantCode+`"`) {
 				t.Fatal(w.Body.String())
 			}
-			if tc.wantCode == "" && !strings.Contains(w.Body.String(), string(user.ID)) {
-				t.Fatal(w.Body.String())
+			if tc.wantCode == "" {
+				var response struct {
+					ID int64 `json:"id"`
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || response.ID != int64(user.ID) {
+					t.Fatalf("unexpected account identity: %s (%v)", w.Body.String(), err)
+				}
 			}
 			if strings.Contains(w.Body.String(), token) || strings.Contains(logs.String(), token) || strings.Contains(logs.String(), "secret") {
 				t.Fatal("secret leaked")

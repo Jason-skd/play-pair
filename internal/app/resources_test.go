@@ -74,9 +74,12 @@ func TestPersonalResourcesApplication(t *testing.T) {
 	}
 	email := uuid.NewString() + "@example.com"
 	registered := request("POST", "/api/v1/auth/register", `{"email":"`+email+`","password":"correct horse battery","displayName":"Initial"}`, 201)
-	var id string
+	var id int64
 	if err := json.Unmarshal(registered["id"], &id); err != nil {
 		t.Fatal(err)
+	}
+	if id <= 0 {
+		t.Fatalf("registration did not return a positive database identity: %d", id)
 	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -97,8 +100,8 @@ func TestPersonalResourcesApplication(t *testing.T) {
 	}
 	request("PUT", "/api/v1/profile", `{"displayName":"Updated","nickname":"Nick","expectedVersion":1}`, 200)
 	me := request("GET", "/api/v1/me", "", 200)
-	if string(me["displayName"]) != `"Updated"` {
-		t.Fatal("stale me", me)
+	if string(me["displayName"]) != `"Updated"` || string(me["id"]) != string(registered["id"]) {
+		t.Fatal("stale display or mismatched account identity", me)
 	}
 	for _, c := range []struct{ budget, access, version string }{{"0", "false", "1"}, {"10000", "true", "2"}, {"null", "null", "3"}} {
 		body := `{"soft":{"likes":"桌游","neutral":"","dislikes":"太吵"},"hardDefaults":{"maxBudgetFen":` + c.budget + `,"requiresWheelchairAccess":` + c.access + `},"expectedVersion":` + c.version + `}`
@@ -120,7 +123,10 @@ func TestPersonalResourcesApplication(t *testing.T) {
 	request("POST", "/api/v1/auth/logout", "", 204)
 	request("GET", "/api/v1/preferences", "", 401)
 	request("GET", "/api/v1/profile", "", 401)
-	request("POST", "/api/v1/auth/login", `{"email":"`+email+`","password":"correct horse battery"}`, 200)
+	loggedIn := request("POST", "/api/v1/auth/login", `{"email":"`+email+`","password":"correct horse battery"}`, 200)
+	if string(loggedIn["id"]) != string(registered["id"]) {
+		t.Fatal("login changed account identity", loggedIn)
+	}
 	got := request("GET", "/api/v1/preferences", "", 200)
 	if string(got["version"]) != "4" {
 		t.Fatal("preferences did not survive new session", got)

@@ -12,12 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// GetProfile reads display data without creating a missing profile implicitly.
 func (db *DB) GetProfile(ctx context.Context, userID users.ID) (profile.Profile, error) {
-	id, err := parseUUID(string(userID))
-	if err != nil {
-		return profile.Profile{}, err
-	}
-	v, err := db.queries.GetProfile(ctx, id)
+	v, err := db.queries.GetProfile(ctx, int64(userID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return profile.Profile{}, errs.NotFound
 	}
@@ -27,16 +24,13 @@ func (db *DB) GetProfile(ctx context.Context, userID users.ID) (profile.Profile,
 	return profileResult(v), nil
 }
 
+// UpdateProfile compares and increments the version in one SQL statement.
 func (db *DB) UpdateProfile(ctx context.Context, userID users.ID, command profile.Update) (profile.Profile, error) {
-	id, err := parseUUID(string(userID))
-	if err != nil {
-		return profile.Profile{}, err
-	}
 	nickname := pgtype.Text{}
 	if command.Nickname != nil {
 		nickname = pgtype.Text{String: *command.Nickname, Valid: true}
 	}
-	v, err := db.queries.UpdateProfile(ctx, generated.UpdateProfileParams{UserID: id, DisplayName: command.DisplayName, Nickname: nickname, Version: command.ExpectedVersion})
+	v, err := db.queries.UpdateProfile(ctx, generated.UpdateProfileParams{UserID: int64(userID), DisplayName: command.DisplayName, Nickname: nickname, Version: command.ExpectedVersion})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return profile.Profile{}, errs.VersionConflict
 	}
@@ -47,7 +41,7 @@ func (db *DB) UpdateProfile(ctx context.Context, userID users.ID, command profil
 }
 
 func profileResult(v generated.Profile) profile.Profile {
-	p := profile.Profile{UserID: users.ID(uuidString(v.UserID)), DisplayName: v.DisplayName, Version: v.Version}
+	p := profile.Profile{UserID: users.ID(v.UserID), DisplayName: v.DisplayName, Version: v.Version}
 	if v.Nickname.Valid {
 		name := v.Nickname.String
 		p.Nickname = &name
