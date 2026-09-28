@@ -12,7 +12,7 @@ make migrate-up
 make run
 ```
 
-默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端用 `curl http://127.0.0.1:8080/healthz` 检查进程，用 `curl http://127.0.0.1:8080/readyz` 检查数据库可用性。按 `Ctrl-C` 关闭服务；`make db-down` 停止数据库并保留数据卷。当前提供健康探针以及邮箱注册、登录、退出、当前用户、个人资料及偏好 API。
+默认连接 `postgres://playpair:playpair_dev@127.0.0.1:55432/playpair?sslmode=disable`，服务监听 `:8080`。另一个终端用 `curl http://127.0.0.1:8080/healthz` 检查进程，用 `curl http://127.0.0.1:8080/readyz` 检查数据库可用性。按 `Ctrl-C` 关闭服务；`make db-down` 停止数据库并保留数据卷。当前提供健康探针以及邮箱注册、登录、退出、当前用户、个人资料、偏好及小组成员 API。
 
 配置来自环境变量：`DATABASE_URL`（直接运行二进制时必需）、`HTTP_ADDR`（默认 `:8080`）、`DB_MAX_CONNS`（`4`）、`STARTUP_TIMEOUT`（`5s`）、`READY_TIMEOUT`（`1s`）、`SHUTDOWN_TIMEOUT`（`10s`）和 `AUTH_COOKIE_SECURE`（默认 `true`）。`make run` 和 `make migrate-up` 使用 `DB_URL`，未设置时连接本地开发库。API 启动不会自动运行迁移。本地纯 HTTP 开发需要设置 `AUTH_COOKIE_SECURE=false`；生产必须通过 HTTPS 使用默认安全 Cookie。
 
@@ -36,7 +36,30 @@ make run
 
 `00004_preferences.sql` 为已有账号创建空偏好（版本 1、硬约束均为 `null`）；新注册账号在注册事务中得到相同初始值。迁移不会替任何用户设置约束或创建 outing 授权。升级时先停止旧版应用，备份并执行迁移，再启动新版；00003 移动了列，不支持新旧应用同时访问旧 schema。00003/00004 的 Down 用于回到旧模型，会丢失新增昵称、版本及偏好数据，不能作为无损回滚流程。
 
-检查与生成：
+### 小组与加入码
+
+小组表示可承载多次 outing 的朋友圈。当前提供以下接口，全部要求 Cookie Session 并禁止缓存：
+
+| 接口 | 行为 |
+| --- | --- |
+| `POST /api/v1/groups` | `{"name":"周末搭子"}`；当前用户成为发起者并自动入组 |
+| `POST /api/v1/groups/join` | `{"joinCode":"ABCDEFGHIJKLMNOP"}`；只凭码加入，不要求事先知道 group ID |
+| `GET /api/v1/groups/{groupId}` | 成员读取小组名称、加入码、发起者和创建/更新时间 |
+| `GET /api/v1/groups/{groupId}/members` | 成员读取当前展示资料、派生角色和加入时间 |
+
+建组必须发送 UUID 格式的 `Idempotency-Key`。同一用户、同一 key、相同规范化名称重试返回原小组（`200`；首次为 `201`），不同名称返回 `409 idempotency_conflict`；不同用户的 key 独立，不同 key 可以创建同名小组。key 随小组永久保存，本期无过期或清理，响应不返回 key。组名去除首尾 Unicode 空白，长度为 1–80 个 Unicode 字符，不允许 NUL 或非法 UTF-8。
+
+加入码由 10 字节密码学随机值生成，为 16 位大写 Base32（`A-Z2-7`）；输入接受首尾空白及 ASCII 小写。所有成员均可读取和分享码，任何已登录用户持有效码可直接加入；不要把码放进 URL 或日志。加入码碰撞最多尝试 5 次。重复加入返回 `200`，不增加记录或改变加入时间，发起者重复加入仍为发起者。
+
+成员关系存在即有效，不保存角色或状态副本；角色仅由 `groups.initiator_id` 派生。数据库延迟联合外键确保发起者在本组成员表中。非成员读取现有小组或成员返回 `403 forbidden`，小组或有效格式加入码不存在返回 `404 not_found`。成员列表按 `memberId` 升序，以 `afterMemberId` 为排他游标，`limit` 默认 50、最大 100；响应的 `nextAfterMemberId` 无下一页时为 `null`。只投影当前 `displayName`、可空 `nickname`（展示时优先昵称），不返回邮箱或偏好。
+
+两种 POST 均要求 `X-PlayPair-Request: 1`、同源 JSON 请求，体积上限 8 KiB，拒绝遗漏、null、重复和未知字段。创建与加入按认证用户分别限流：每 10 分钟 20 次，超限返回 `429` 和 `Retry-After`；限流为单进程内存实现。每个小组操作受请求 context 和 5 秒上限约束，取消或锁等待超时返回现有依赖失败响应。
+
+数据库 trigger 在小组或成员关系实际变化时更新 `updated_at`，移动成员行会更新旧、新小组。时间不倒退但不保证严格递增，不是版本号或提交顺序；读取、重复加入、创建重放、个人资料或偏好更新均不 touch 小组。成员写入先锁小组，触发器时间变化随事务回滚。
+
+`00006_groups.sql` 仅新增小组对象，不自动回填小组或修改旧业务数据。部署先执行迁移，再启动新版应用。其 Down **会删除全部小组和成员数据**，不是无损回滚。当前不提供转让、踢人、退出、解散、账号注销、改名、加入码轮换或“我的小组”列表，也不实现 outing 功能。
+
+### 检查与生成
 
 ```sh
 make check
@@ -58,7 +81,7 @@ make test-smoke
 
 ## 项目架构
 
-这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。`internal/users` 管理账号身份，`internal/credentials` 管理注册登录与密码凭据，`internal/session` 管理会话，`internal/profile` 管理展示资料，`internal/preference` 管理偏好；其他业务模块只接收认证后的账号身份。
+这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。`internal/users` 管理账号身份，`internal/credentials` 管理注册登录与密码凭据，`internal/session` 管理会话，`internal/profile` 管理展示资料，`internal/preference` 管理偏好，`internal/group` 管理小组与成员关系；其他业务模块只接收认证后的账号身份。
 
 `users` 仅保存账号 ID 和创建时间；ID 使用 PostgreSQL `BIGINT GENERATED ALWAYS AS IDENTITY`，由 `INSERT … RETURNING id, created_at` 返回，Go 中为 `users.ID`（底层 `int64`）。应用和请求均不指定账号 ID；自增序列允许因事务回滚产生空洞，不承诺连续或代表提交顺序。`password_credentials` 保存登录邮箱、密码哈希与更新时间；`profiles` 保存显示名、可选昵称和独立版本；`preferences` 保存软偏好、硬约束默认值与另一套独立版本。注册先插入账号获得 ID，再在同一事务中创建凭据、资料、空偏好和 session；任何一步失败都不返回账号或令牌。会话验证只读取 `sessions` 与 `users`；现有注册、登录和 `/me` 响应使用独立读取投影组合邮箱与显示名，不在认证查询中读取资料或密码。
 
@@ -75,6 +98,7 @@ make test-smoke
 | `internal/session/` | 会话签发、认证、到期与撤销 |
 | `internal/profile/` | 个性化展示资料 |
 | `internal/preference/` | 软偏好文本、可空硬约束默认值及独立版本 |
+| `internal/group/` | 小组名称/加入码校验、成员读取、派生角色和操作时限 |
 | `internal/config/`  | 启动时解析并校验环境配置                    |
 | `internal/db/`      | PostgreSQL 连接池、健康查询和 sqlc 生成代码 |
 | `api/`、`db/`       | HTTP 契约、迁移和 SQL 查询的源文件          |

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Jason-skd/play-pair/internal/api/generated"
 	"github.com/Jason-skd/play-pair/internal/credentials"
+	"github.com/Jason-skd/play-pair/internal/group"
 	"github.com/Jason-skd/play-pair/internal/preference"
 	"github.com/Jason-skd/play-pair/internal/profile"
 	"github.com/Jason-skd/play-pair/internal/session"
@@ -26,6 +27,7 @@ type UserReader interface {
 // Services supplies the router's explicit dependencies, assembled by the caller.
 // Account authentication stays separate from display and preference operations.
 type Services struct {
+	Groups      *group.Service
 	Preferences *preference.Service
 	Profiles    *profile.Service
 	Credentials *credentials.Service
@@ -57,6 +59,11 @@ func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, services
 	wrapper := generated.ServerInterfaceWrapper{Handler: s, HandlerMiddlewares: []generated.MiddlewareFunc{crossOriginProtection()}, ErrorHandler: func(c *gin.Context, _ error, status int) {
 		writeError(c, status, generated.InvalidInput, "Invalid request")
 	}}
+	groups := r.Group("/api/v1/groups", func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.Next() }, s.requireUser())
+	groups.POST("", wrapper.CreateGroup)
+	groups.POST("/join", wrapper.JoinGroup)
+	groups.GET("/:groupId", wrapper.GetGroup)
+	groups.GET("/:groupId/members", wrapper.GetGroupMembers)
 	r.POST("/api/v1/auth/register", wrapper.Register)
 	r.POST("/api/v1/auth/login", wrapper.Login)
 	r.POST("/api/v1/auth/logout", wrapper.Logout)

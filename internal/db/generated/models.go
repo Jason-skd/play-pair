@@ -8,6 +8,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Group struct {
+	ID          int64
+	Name        string
+	JoinCode    string
+	InitiatorID int64
+	CreationKey pgtype.UUID
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+type GroupMember struct {
+	GroupID  int64
+	MemberID int64
+	JoinedAt pgtype.Timestamptz
+}
+
 type PasswordCredential struct {
 	PasswordHash string
 	UpdatedAt    pgtype.Timestamptz
