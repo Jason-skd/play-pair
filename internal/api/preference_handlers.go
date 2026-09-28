@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// GetPreferences returns saved defaults for the authenticated account only.
 func (s *server) GetPreferences(c *gin.Context) {
 	id, ok := s.resourceActor(c)
 	if !ok {
@@ -20,6 +21,9 @@ func (s *server) GetPreferences(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, preferenceResponse(p))
 }
+
+// PutPreferences requires every field, including explicit nulls to clear hard
+// defaults. Identity comes from the session, never from the replacement body.
 func (s *server) PutPreferences(c *gin.Context, params generated.PutPreferencesParams) {
 	id, ok := s.resourceActor(c)
 	if !ok {

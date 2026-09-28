@@ -1,4 +1,4 @@
-// Package api adapts HTTP requests to health and authentication services.
+// Package api adapts HTTP requests to health, authentication and personal resources.
 package api
 
 import (
@@ -22,6 +22,9 @@ type HealthCheck func(context.Context) error
 type UserReader interface {
 	UserDetails(context.Context, users.ID) (email, displayName string, err error)
 }
+
+// Services supplies the router's explicit dependencies, assembled by the caller.
+// Account authentication stays separate from display and preference operations.
 type Services struct {
 	Preferences *preference.Service
 	Profiles    *profile.Service
@@ -39,7 +42,7 @@ type server struct {
 }
 
 // New assembles HTTP routes and request middleware. The caller owns the check,
-// logger, and authentication service and must keep them valid while serving.
+// logger, and services and must keep them valid while serving.
 // A true secureCookie requires HTTPS for browsers to return session cookies.
 func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, services Services, secureCookie bool) *gin.Engine {
 	s := &server{check: check, timeout: timeout, log: logger, services: services, secureCookie: secureCookie, limits: newLimiter(10000)}

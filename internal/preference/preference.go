@@ -12,8 +12,11 @@ import (
 	"github.com/Jason-skd/play-pair/internal/users"
 )
 
+// ErrInvalidInput identifies invalid text, budget or expected version values.
 var ErrInvalidInput = errors.New("invalid preference")
 
+// Soft holds optional free text for later AI scoring, at most 500 Unicode code
+// points per field. Dislikes are not interpreted as mandatory exclusions.
 type Soft struct {
 	Likes    string
 	Neutral  string
@@ -27,6 +30,8 @@ type HardDefaults struct {
 	RequiresWheelchairAccess *bool
 }
 
+// Preference is a user's saved defaults, versioned independently of their profile.
+// Its values are not an authorization or a constraint snapshot for any outing.
 type Preference struct {
 	UserID       users.ID
 	Soft         Soft
@@ -34,24 +39,34 @@ type Preference struct {
 	Version      int64
 }
 
+// Update fully replaces saved defaults at ExpectedVersion. Empty text and nil
+// hard defaults clear old values; they do not mean "leave the old value unchanged".
 type Update struct {
 	Soft            Soft
 	HardDefaults    HardDefaults
 	ExpectedVersion int64
 }
 
+// Repository persists preferences. UpdatePreference must compare and increment
+// the version atomically, returning errs.VersionConflict on a mismatch.
 type Repository interface {
 	GetPreference(context.Context, users.ID) (Preference, error)
 	UpdatePreference(context.Context, users.ID, Update) (Preference, error)
 }
 
+// Service validates soft text and optional hard defaults before persistence.
 type Service struct{ repo Repository }
 
+// New creates a preference service backed by repo.
 func New(repo Repository) *Service { return &Service{repo: repo} }
+
+// Get returns existing defaults without confirming participation in an outing.
 func (s *Service) Get(ctx context.Context, id users.ID) (Preference, error) {
 	return s.repo.GetPreference(ctx, id)
 }
 
+// Replace validates and fully replaces defaults at the expected version.
+// Nil, zero budget and an explicit false requirement retain distinct meanings.
 func (s *Service) Replace(ctx context.Context, id users.ID, c Update) (Preference, error) {
 	if c.ExpectedVersion < 1 || c.ExpectedVersion == math.MaxInt64 {
 		return Preference{}, ErrInvalidInput
