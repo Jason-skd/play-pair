@@ -5,9 +5,8 @@ import (
 	"net/http"
 
 	"github.com/Jason-skd/play-pair/internal/api/generated"
-	"github.com/Jason-skd/play-pair/internal/auth"
+	"github.com/Jason-skd/play-pair/internal/users"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -20,9 +19,17 @@ func (s *server) Me(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, userResponse(u))
+	s.respondUser(c, http.StatusOK, u)
 }
 
-func userResponse(u auth.User) generated.User {
-	return generated.User{Id: openapi_types.UUID(uuid.MustParse(u.ID)), Email: openapi_types.Email(u.Email), DisplayName: u.DisplayName, CreatedAt: u.CreatedAt}
+func (s *server) respondUser(c *gin.Context, status int, u users.Account) {
+	email, name, err := s.services.Users.UserDetails(c.Request.Context(), u.ID)
+	if err != nil {
+		s.failure(c, err)
+		return
+	}
+	c.JSON(status, userResponse(u, email, name))
+}
+func userResponse(u users.Account, email, name string) generated.User {
+	return generated.User{Id: int64(u.ID), Email: openapi_types.Email(email), DisplayName: name, CreatedAt: u.CreatedAt}
 }

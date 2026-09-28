@@ -4,7 +4,7 @@
 
 本文只描述 PlayPair 后端仓库的技术实施路径。它服务于 `docs/proposal/Proposal_PlayPair_v4.tex` 中已经确定的 Alpha 和 Beta 交付，不重复课程规划、用户研究安排、成员分工和报告写作计划。
 
-Proposal v4 是产品范围和用户可见行为的上位来源；本文把其中的行为转换为后端模块、数据、接口、事务和验证任务。本文中的“建议”表示后端落地所需、但 Proposal v4 没有唯一规定的技术选择；在开始对应实现前必须确认这些选择。
+Proposal v4 是历史产品范围基线；2026-09-27 已确认的模块拆分、可空偏好和暂不提供 Exclude 的决策优先于其中相应描述；本文把其中的行为转换为后端模块、数据、接口、事务和验证任务。本文中的“建议”表示后端落地所需、但 Proposal v4 没有唯一规定的技术选择；在开始对应实现前必须确认这些选择。
 
 当前仓库已经建立 Go 服务、数据库迁移、OpenAPI 契约和生成检查。下面描述完整后端目标；具体完成状态以当前代码、测试和 Issue 为准。
 
@@ -15,9 +15,9 @@ Proposal v4 是产品范围和用户可见行为的上位来源；本文把其�
 1. 用户注册、登录和当前用户识别。
 2. 创建小组、使用小组码加入小组，以及小组成员关系。
 3. 创建 outing，邀请小组成员，并记录接受或拒绝。
-4. 参与成员提交本次 outing 可用时间和已确认硬约束；软偏好从其持续维护的 profile 读取。
+4. 参与成员提交本次 outing 可用时间和已确认硬约束；软偏好从其持续维护的 preference 读取。
 5. 从固定的 SCNU 附近活动/地点目录构造候选。
-6. 在 Go 后端执行时间、预算、无障碍、明确排除项等硬约束过滤。
+6. 在 Go 后端执行时间、预算和轮椅通行要求的硬约束过滤。
 7. 通过统一的 `DecisionProvider` 对每个可行候选进行结构化评分。
 8. 对可行候选排序，返回最多三个完整的“时间—活动—地点”方案。
 9. 保存一次决策所使用的输入快照、目录版本、约束结果、提供者结果和最终排名。
@@ -54,7 +54,11 @@ Proposal v4 是产品范围和用户可见行为的上位来源；本文把其�
 cmd/playpair-api/           进程入口；只调用 internal/app，不承载业务逻辑
 internal/app/                组合根、生命周期和依赖装配
 internal/api/                Gin router、HTTP middleware、handler 和协议映射
-internal/user/               用户、偏好；domain/logic/dto/ports 作为同一业务包内的文件
+internal/users/              账号身份
+internal/credentials/        登录邮箱、密码凭据、注册与登录用例
+internal/session/            会话签发、校验和撤销
+internal/profile/            显示名、昵称与独立资料版本
+internal/preference/         软偏好、硬约束默认值与独立偏好版本
 internal/group/              小组、成员关系；domain/logic/dto/ports
 internal/outing/             outing、邀请、成员输入；domain/logic/dto/ports
 internal/catalog/            固定目录及版本；domain/logic/dto/ports
@@ -135,13 +139,13 @@ Gin 解决入站请求的路由和响应，不是通用的出站 API 客户端�
 
 ### 3.5 Go 实践门禁
 
-当前仓库还没有代码，下面这些不是对现有实现的缺陷报告，而是开始编码前必须加入设计的门禁：
+以下是现有实现和后续功能共同遵循的工程门禁；计划中的后续模块不代表已经实现：
 
 1. **模块边界和组合根。** 每个 feature logic 只依赖本包定义的最小 port；`cmd/playpair-api` 不创建业务对象，`internal/app` 统一装配生命周期、配置和 adapter。禁止在 `init` 或全局变量中注册依赖。Go 官方资料支持使用 `internal/` 隔离不对外承诺的包，但并不规定 Clean Architecture 的目录名称；这里的 flat feature layout 是本项目选择。
 2. **聚合根和事务。** 聚合边界必须按下面第 4.3 节的所有权实现；repository 方法按用例需要定义，不提供让上层随意拼装半个聚合的通用 CRUD。一个事务只负责一个明确的状态转换和其不变量；外部网络调用永远不在该事务内。
 3. **DTO 映射和协议隔离。** `internal/api` 的 HTTP DTO 负责协议格式校验并映射为 feature application command；response DTO 由 application result 映射生成。Gin 的 `*gin.Context`、HTTP 状态码、sqlc 类型和数据库错误不能穿过 adapter 边界。
 4. **错误模型。** domain/application 定义可判别的业务错误（未认证、无权限、输入无效、状态冲突、无可行候选、provider 失败等）；adapter 用 `%w` 保留根因，调用方用 `errors.Is/As` 判断身份；HTTP 层集中做一次错误到状态码/错误体的映射。禁止用字符串比较错误，也禁止把 provider 原始响应直接返回给用户。
-5. **不可变快照和版本。** `PreferenceProfile`、接受邀请时授权的硬约束、目录版本、provider 配置和每次 `DecisionRun` 的输入都要有版本或快照。profile 更新不能修改历史决策；任何重算都创建新运行。
+5. **不可变快照和版本。** `Preference`、接受邀请时授权的硬约束、目录版本、provider 配置和每次 `DecisionRun` 的输入都要有版本或快照。preference 或 profile 更新不能修改历史决策；任何重算都创建新运行。
 6. **时间、金额和 ID 值对象。** 领域层使用 UTC `time.Time` 表示真实瞬时点；本地时间和 IANA 时区只在输入/输出 adapter 解析。金额使用整数最小货币单位和明确币种，禁止 `float64`；实体 ID 使用有语义的类型，禁止在业务层到处传裸字符串。
 7. **外部调用生命周期。** 所有 provider 调用接收 `context.Context`，使用共享且有界的 HTTP client，设置超时、响应体上限、取消和受控重试。fallback 是 application 层的显式 policy，不藏在某个 client 的重试实现里；数据库事务不跨越外部网络调用。
 8. **长运行决策。** `DecisionRun` 必须有明确的状态和超时边界。Alpha 首版使用带 request context 和总 deadline 的有界同步调用；成功才返回排名，超时返回可判别的 timeout/dependency failure，并保留已提交的运行记录。只有在引入有持久化队列、worker、租约、重试和幂等键后，才允许改为 `202 + run ID`；不要在 handler 中启动无归属 goroutine，也不要用固定 sleep 等待结果。
@@ -156,14 +160,15 @@ Gin 解决入站请求的路由和响应，不是通用的出站 API 客户端�
 
 ### 4.1 核心实体
 
-- `User`：用户身份、邮箱、显示名、创建时间，不包含密码或会话状态。
-- `PasswordCredential`：与用户一对一的密码凭据，独立保存密码哈希和更新时间。注册在同一事务中创建用户、凭据和会话；密码登录联表读取凭据，session 验证只查询会话和用户。
-- `PreferenceProfile`：用户持续维护的软偏好、可作为 outing 接受快捷填入项的个人硬约束默认值、显示名和可选昵称/外号。软偏好不要求每次接受邀请时重填；硬约束默认值只有在接受具体邀请时向用户展示并经明确确认后，才成为该 outing 的输入。推荐文本使用用户配置的昵称/外号优先，未配置时使用显示名。
+- `User`：账号身份和创建时间，不包含登录邮箱、展示资料、密码或会话状态。按 2026-09-28 确认的实现选择，ID 为数据库生成的 BIGINT 自增键，经 INSERT RETURNING 返回；Go 使用 int64 底层的 users.ID，HTTP 使用整数。应用不预生成 ID；注册在同一事务中使用返回值创建所有关联资源，失败时整笔回滚，自增序列允许空洞。
+- `Profile`：显示名、可选昵称和独立版本；与 preference 分别维护。
+- `PasswordCredential`：与用户一对一的密码凭据，独立保存登录邮箱、密码哈希和更新时间。注册在同一事务中创建用户、凭据、资料、空偏好和会话；密码登录联表读取凭据，session 验证只查询会话和用户。
+- `Preference`：与 Profile 独立的一对一用户资源和版本。软偏好为喜欢、一般、不喜欢三栏自由文本，每栏最多 500 个 Unicode 字符，可全部留空；不要求每次接受邀请时重填。硬约束默认值仅为可空的人民币人均预算上限（整数分）和可空的轮椅通行要求。预算 null 与 0 不同；轮椅要求 null、false、true 分别表示未填写、明确无此要求、有此要求。不存在 Exclude 字段。保存默认值不表示授权任何 outing。
 - `Group`：小组标识、名称、加入码及创建者。
 - `GroupMembership`：用户与小组的关系、角色（initiator/member）、状态和加入时间。
 - `Outing`：小组下的活动协调实例、创建者、目标日期范围、Alpha 中发起者选择的活动时长、状态和确认方案；时间字段以数据库中的 UTC 瞬时点表示。Beta 的活动时长可以由每个候选的目录活动建议，不能假设所有候选共享一个时长。
 - `Invitation`：outing 对某个小组成员的邀请状态、响应时间，以及接受时确认的硬约束输入快照。
-- `MemberInput`：某个参与成员针对一次 outing 的可用时间、已授权硬约束、当前软偏好快照和提交版本。软偏好来自用户 profile，不要求重复填写。
+- `MemberInput`：某个参与成员针对一次 outing 的可用时间、已授权硬约束、当前软偏好快照和提交版本。软偏好来自用户 preference，不要求重复填写。
 - `CatalogVersion`：固定目录的版本、来源说明和核验时间。
 - `CatalogItem`：活动或地点、地址、价格、开放时间、标签、无障碍和其他限制。
 - `DecisionRun`：一次候选构造和评分运行的输入快照、最长共同可用窗口、目录版本、活动推荐/评分 provider 标识、状态和时间。
@@ -215,10 +220,10 @@ TieBreak: not_needed | requested -> scored -> initiator_confirmed
 ### 5.1 输入收集和快照
 
 1. 校验用户属于 outing 所在小组，且只允许有效邀请对象提交该 outing 的输入。
-2. 接受邀请时读取 `PreferenceProfile` 的硬约束默认值，将其展示给用户；用户必须明确确认默认值或修改后确认。服务端只把确认后的值写入该 outing，不能因 profile 默认值存在而静默授权。
-3. 确定本次运行的参与成员集合：使用所有已接受邀请、已确认本次 outing 硬约束且提交完整可用时间的成员。成员的软偏好从当前 profile 读取，不要求在接受邀请时重复填写。
+2. 接受邀请时读取 `Preference` 的硬约束默认值，将其展示给用户；用户必须明确确认默认值或修改后确认，也可以清空全部个人约束后一次确认。全部为空且已确认是有效输入；全部为空但未确认不能进入决策。服务端只把确认后的值写入该 outing，不能因 preference 默认值存在而静默授权。
+3. 确定本次运行的参与成员集合：使用所有已接受邀请、已确认本次 outing 硬约束且提交完整可用时间的成员。成员的软偏好从当前 preference 读取，不要求在接受邀请时重复填写。
 4. 校验各成员输入的 IANA 时区和本地日期时间，在该请求的时区下解析，再规范化为 UTC 时间点和结构化约束值。
-5. 将参与成员集合、每个成员的已授权硬约束、软偏好 profile 版本、目录版本和算法配置复制到 `DecisionRun` 快照中。决策运行开始后 profile 更新不改变本次运行；新的偏好需要新的运行才能生效。
+5. 将参与成员集合、每个成员的已授权硬约束、软偏好 preference 版本、目录版本和算法配置复制到 `DecisionRun` 快照中。决策运行开始后 preference 更新不改变本次运行；新的偏好需要新的运行才能生效。若需展示成员名称，另外快照 Profile 内容与版本，昵称优先；修改展示资料不增加 preference 版本。
 6. 输入不完整时返回可区分的业务错误，不调用 provider。
 
 ### 5.2 候选构造和硬约束过滤
@@ -229,7 +234,7 @@ TieBreak: not_needed | requested -> scored -> initiator_confirmed
 2. 从固定 `CatalogVersion` 读取活动/地点及其已核验的典型活动时长和开放时间。
 3. Alpha 使用发起者选择的统一活动时长。Beta 将最长共同可用窗口和目录活动候选交给活动推荐 LLM，要求推荐活动的所需时长小于或等于该窗口上限；LLM 只能选择目录中的活动，不能生成新活动或新时长事实。
 4. Go 根据每个活动的实际时长、开放时间和每个共同窗口，筛选可用的时间—活动—地点组合；活动推荐失败时进入 Alpha 版由发起者选择活动时长的界面。
-5. 对预算、开放时间、无障碍、明确排除项和其他已确认硬约束逐项检查。
+5. 对已设置的人均预算上限、已提出的轮椅通行要求和目录开放时间逐项检查。未填写的个人约束不参与该项过滤；时间窗口和开放时间始终检查。Alpha 不提供 Exclude。
 6. 为每个候选保存逐项约束结果、活动时长和失败原因；只把所有硬约束通过的候选交给 `DecisionProvider`（Alpha 的 Jev/LLM/Mock 评分 provider）。
 
 没有可行候选时返回可处理的领域结果，并明确要求用户调整输入；不返回 provider 生成的替代地点，也不静默放宽约束。候选数量上限和组合裁剪顺序属于容量策略，由 typed config 给出有界、可复现的默认值；裁剪不能改变硬约束语义，最低可行候选数不足时直接返回无可行候选。
@@ -293,7 +298,8 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 | 能力 | 接口摘要 | 主要后端责任 |
 |---|---|---|
 | 认证 | `POST /api/v1/auth/register`、`/login`、`/logout`、`GET /me` | 身份、session、错误映射 |
-| 偏好 | `GET /preferences`、`PUT /preferences` | 维护软偏好和可用于接受邀请快捷填入的硬约束默认值 |
+| 展示资料 | `GET /api/v1/profile`、`PUT /api/v1/profile` | 显示名、可选昵称与独立版本；昵称优先 |
+| 偏好 | `GET /api/v1/preferences`、`PUT /api/v1/preferences` | 维护软偏好和可用于接受邀请快捷填入的硬约束默认值 |
 | 小组 | `POST /groups`、`POST /groups/{id}/join`、`GET /groups/{id}` | 加入码、成员权限、角色 |
 | outing | `POST /groups/{id}/outings`、`GET /outings/{id}` | 创建、读取、状态检查和发起者选择活动时长 |
 | 邀请 | `POST /outings/{id}/invitations/{member}/respond` | 接受/拒绝及幂等性 |
@@ -304,6 +310,8 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 | Beta 推荐 | `GET /candidates/{id}/recommendation` | 推荐文本状态和证据校验状态 |
 | Beta 投票 | `POST /outings/{id}/votes`、`POST /outings/{id}/votes/close`、`GET /outings/{id}/votes` | 排序选票、发起人提前关闭、AI 并列辅助和最终结果 |
 
+个人资料和偏好 PUT 已采用完整替换：必填键不可遗漏，可清空值必须明确发送 null 或空字符串；expectedVersion 与数据库当前版本匹配才可原子写入并递增，过期版本返回 409 version_conflict。两个资源均只允许当前登录用户读写，无目标 user ID 参数。注册事务创建两份版本 1 的资源，迁移为已有用户回填；读取不会隐式创建或确认资源。资料与偏好接口已实现，本节其他 outing/decision 接口仍为后续计划。
+
 所有写接口应使用明确的资源版本或状态检查和幂等键（适用于可能重试的创建/运行请求），重复请求不能产生重复邀请、重复确认或重复投票。错误响应使用稳定的错误码，至少区分未认证、无权限、输入无效、状态冲突、无可行候选、provider 失败、超时和内部依赖失败。Alpha 决策成功才返回结果；请求 deadline 到期不伪装成已接受的后台任务。
 
 ## 8. 持久化、事务和并发
@@ -312,7 +320,7 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 - 创建 outing、生成决策运行、确认方案和提交投票分别定义事务边界。
 - `internal/db` 负责 sqlc 生成代码、连接池和按 feature port 实现的 adapter；feature 不导入 sqlc 包，也不暴露通用 `Repository`。事务能力通过明确的 adapter 方法或 transaction callback 暴露，不能让 application 层直接拼接 SQL。
 - 决策运行保存输入和配置快照，确保目录或成员输入变化后仍能复查历史结果。
-- 决策运行保存每个参与成员的硬约束授权结果、软偏好 profile 版本和快照内容；profile 后续更新不改写历史运行。
+- 决策运行保存每个参与成员的硬约束授权结果、软偏好 preference 版本和快照内容；preference 后续更新不改写历史运行。
 - 确认方案使用乐观版本号或等价的并发检查，避免两个请求同时确认不同候选。
 - 所有数据库时间比较使用保存的 UTC 瞬时点；响应层才根据 `X-Client-Timezone` 生成用户本地时间和日期分组。
 - Provider 自动切换产生的每次尝试、失败原因和最终模型来源都写入决策记录；结果 DTO 只展示安全的 provider/model 标签。
@@ -326,9 +334,9 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 ### 9.1 单元和领域测试
 
 - 时间窗口交集、跨午夜和时区规范化。
-- 预算、开放时间、无障碍和排除项逐项过滤。
+- 预算、开放时间和轮椅通行要求逐项过滤；预算和轮椅要求可空，未知目录事实不能冒充满足已提出的约束。
 - 缺失输入、空参与集合和无可行候选。
-- profile 硬约束默认值必须经过明确确认；未确认的成员不能进入决策，软偏好 profile 更新后只影响新的决策运行。
+- preference 硬约束默认值必须经过明确确认；未确认的成员不能进入决策，软偏好 preference 更新后只影响新的决策运行。
 - 排序并列、非法 provider 响应、分数缺失和配置版本。
 - provider 自动切换、实际模型标签和所有 provider 失败。
 - 所有状态转换、权限检查和重复请求幂等性。
@@ -368,7 +376,7 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 
 按以下依赖顺序实现：
 
-1. User、PreferenceProfile、Group、Membership 和权限；
+1. User、Profile、Preference、Group、Membership 和权限；
 2. Outing、Invitation、硬约束确认和响应幂等性；
 3. MemberInput 规范化和完整性校验；
 4. CatalogVersion/CatalogItem 导入和读取；
@@ -399,14 +407,14 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 ### 11.1 已由当前讨论确定的 Alpha 规则
 
 - 一次决策使用所有已接受本次邀请、明确确认本次 outing 硬约束并提交完整可用时间的成员。
-- 用户的软偏好属于持续维护的 `PreferenceProfile`，不要求每次接受邀请时重填；决策开始时读取并快照参与成员当前 profile。
-- 用户 profile 中的硬约束只是接受邀请时的快捷填入默认值。界面必须展示默认值并取得明确确认；未经确认不得进入 outing 分析。接受后可修改本次 outing 的硬约束，不改写 profile 默认值。
+- 用户的软偏好属于持续维护的 `Preference`，不要求每次接受邀请时重填；决策开始时读取并快照参与成员当前 preference。
+- 用户 preference 中的硬约束只是接受邀请时的快捷填入默认值。界面必须展示默认值并取得明确确认；未经确认不得进入 outing 分析。接受后可修改本次 outing 的硬约束，不改写 preference 默认值。
 - 成员可用时间使用 `[startLocal, endLocal)`；候选开始时间粒度为 30 分钟。
 - Alpha 活动时长由发起者选择；Beta 的活动推荐 LLM 可直接为目录活动提出不超过最长共同可用窗口的时长，Go 校验后进入候选构造。
 - Beta 先计算最长共同可用窗口，再由 LLM 推荐时长不超过窗口上限的目录活动；Go 筛选实际可用时间段后交给 Jev 评分。
 - 活动推荐或推荐文本失败时保留可行候选，回退到 Alpha 版候选列表界面，仍允许发起者确认。
 - 推荐文本可以引用成员姓名；如果 profile 配置了昵称/外号，优先使用昵称/外号。
-- Alpha 硬约束采用人均预算、无障碍要求、明确排除项和目录开放时间；首版预算使用人民币。
+- Alpha 个人硬约束仅为人均预算上限和轮椅通行要求，均允许不填；首版预算以人民币分计价。目录开放时间、共同可用时间与活动时长属于系统必查条件。暂不提供 Exclude，也不从自由文本自动生成硬约束。
 - Provider 允许自动切换。切换按 provider 链重跑整批候选，不混合不同 provider 的部分分数；结果显示实际使用的 provider/model 小标签，并在决策记录保存尝试和失败原因。
 
 ### 11.2 仍需在 Beta 前确定的事项

@@ -37,6 +37,66 @@ paths:
       responses:
         '204': {description: Logged out}
         default: {$ref: '#/components/responses/Error'}
+  /api/v1/profile:
+    get:
+      operationId: getProfile
+      security:
+        - CookieSession: []
+      responses:
+        '200':
+          description: Current user's display profile
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Profile'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putProfile
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: '#/components/parameters/BrowserWriteHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateProfile'}
+      responses:
+        '200':
+          description: Replaced profile with incremented version
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Profile'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/preferences:
+    get:
+      operationId: getPreferences
+      security:
+        - CookieSession: []
+      responses:
+        '200':
+          description: Current user's preference
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Preference'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putPreferences
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: '#/components/parameters/BrowserWriteHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdatePreference'}
+      responses:
+        '200':
+          description: Replaced preference with incremented version
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Preference'}
+        default: {$ref: '#/components/responses/Error'}
   /api/v1/me:
     get:
       operationId: me
@@ -103,6 +163,54 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    SoftPreferences:
+      type: object
+      additionalProperties: false
+      required: [likes, neutral, dislikes]
+      properties:
+        likes: {type: string, maxLength: 500}
+        neutral: {type: string, maxLength: 500}
+        dislikes: {type: string, maxLength: 500}
+    HardDefaults:
+      description: Optional defaults only; saving does not authorize any outing. Currency is CNY, measured in fen.
+      type: object
+      additionalProperties: false
+      required: [maxBudgetFen, requiresWheelchairAccess]
+      properties:
+        maxBudgetFen: {type: integer, format: int64, minimum: 0, nullable: true}
+        requiresWheelchairAccess: {type: boolean, nullable: true}
+    Preference:
+      type: object
+      additionalProperties: false
+      required: [soft, hardDefaults, version]
+      properties:
+        soft: {$ref: '#/components/schemas/SoftPreferences'}
+        hardDefaults: {$ref: '#/components/schemas/HardDefaults'}
+        version: {type: integer, format: int64, minimum: 1}
+    UpdatePreference:
+      type: object
+      additionalProperties: false
+      required: [soft, hardDefaults, expectedVersion]
+      properties:
+        soft: {$ref: '#/components/schemas/SoftPreferences'}
+        hardDefaults: {$ref: '#/components/schemas/HardDefaults'}
+        expectedVersion: {type: integer, format: int64, minimum: 1, maximum: 9223372036854775806}
+    Profile:
+      type: object
+      additionalProperties: false
+      required: [displayName, nickname, version]
+      properties:
+        displayName: {type: string, minLength: 1, maxLength: 80}
+        nickname: {type: string, nullable: true, maxLength: 80}
+        version: {type: integer, format: int64, minimum: 1}
+    UpdateProfile:
+      type: object
+      additionalProperties: false
+      required: [displayName, nickname, expectedVersion]
+      properties:
+        displayName: {type: string, minLength: 1, maxLength: 80}
+        nickname: {type: string, nullable: true, maxLength: 80}
+        expectedVersion: {type: integer, format: int64, minimum: 1, maximum: 9223372036854775806}
     RegisterRequest:
       type: object
       additionalProperties: false
@@ -123,7 +231,7 @@ components:
       additionalProperties: false
       required: [id, email, displayName, createdAt]
       properties:
-        id: {type: string, format: uuid}
+        id: {type: integer, format: int64, minimum: 1, description: Database-generated account identity.}
         email: {type: string, format: email}
         displayName: {type: string, minLength: 1}
         createdAt: {type: string, format: date-time}
@@ -145,6 +253,6 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_input, email_conflict, invalid_credentials, unauthenticated, forbidden, rate_limited, csrf_rejected, dependency_unavailable, not_found, method_not_allowed, internal_error]
+              enum: [invalid_input, version_conflict, email_conflict, invalid_credentials, unauthenticated, forbidden, rate_limited, csrf_rejected, dependency_unavailable, not_found, method_not_allowed, internal_error]
             message: {type: string, minLength: 1}
             requestId: {type: string, minLength: 1}
