@@ -85,17 +85,17 @@ func (q *Queries) FindGroupCreation(ctx context.Context, arg FindGroupCreationPa
 }
 
 const groupAccess = `-- name: GroupAccess :one
-SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id = g.id AND member_id = $2::bigint) AS allowed
-FROM groups g WHERE g.id = $1
+SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id = g.id AND member_id = $1::bigint) AS allowed
+FROM groups g WHERE g.id = $2
 `
 
 type GroupAccessParams struct {
-	ID    int64
-	Actor int64
+	Actor   int64
+	GroupID int64
 }
 
 func (q *Queries) GroupAccess(ctx context.Context, arg GroupAccessParams) (bool, error) {
-	row := q.db.QueryRow(ctx, groupAccess, arg.ID, arg.Actor)
+	row := q.db.QueryRow(ctx, groupAccess, arg.Actor, arg.GroupID)
 	var allowed bool
 	err := row.Scan(&allowed)
 	return allowed, err
@@ -182,12 +182,12 @@ WHERE g.id = $1 AND EXISTS (SELECT 1 FROM group_members m WHERE m.group_id = g.i
 `
 
 type ReadAuthorizedGroupParams struct {
-	ID    int64
-	Actor int64
+	GroupID int64
+	Actor   int64
 }
 
 func (q *Queries) ReadAuthorizedGroup(ctx context.Context, arg ReadAuthorizedGroupParams) (Group, error) {
-	row := q.db.QueryRow(ctx, readAuthorizedGroup, arg.ID, arg.Actor)
+	row := q.db.QueryRow(ctx, readAuthorizedGroup, arg.GroupID, arg.Actor)
 	var i Group
 	err := row.Scan(
 		&i.ID,
@@ -205,8 +205,8 @@ const readGroup = `-- name: ReadGroup :one
 SELECT id, name, join_code, initiator_id, creation_key, created_at, updated_at FROM groups WHERE id = $1
 `
 
-func (q *Queries) ReadGroup(ctx context.Context, id int64) (Group, error) {
-	row := q.db.QueryRow(ctx, readGroup, id)
+func (q *Queries) ReadGroup(ctx context.Context, groupID int64) (Group, error) {
+	row := q.db.QueryRow(ctx, readGroup, groupID)
 	var i Group
 	err := row.Scan(
 		&i.ID,

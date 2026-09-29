@@ -83,7 +83,7 @@ make test-smoke
 
 这是单 Go module 服务。请求经 `internal/api` 的 Gin 路由进入，数据库查询经 `internal/db` 的 sqlc 生成代码访问 PostgreSQL。`internal/users` 管理账号身份，`internal/credentials` 管理注册登录与密码凭据，`internal/session` 管理会话，`internal/profile` 管理展示资料，`internal/preference` 管理偏好，`internal/group` 管理小组与成员关系；其他业务模块只接收认证后的账号身份。
 
-`users` 仅保存账号 ID 和创建时间；ID 使用 PostgreSQL `BIGINT GENERATED ALWAYS AS IDENTITY`，由 `INSERT … RETURNING id, created_at` 返回，Go 中为 `users.ID`（底层 `int64`）。应用和请求均不指定账号 ID；自增序列允许因事务回滚产生空洞，不承诺连续或代表提交顺序。`password_credentials` 保存登录邮箱、密码哈希与更新时间；`profiles` 保存显示名、可选昵称和独立版本；`preferences` 保存软偏好、硬约束默认值与另一套独立版本。注册先插入账号获得 ID，再在同一事务中创建凭据、资料、空偏好和 session；任何一步失败都不返回账号或令牌。会话验证只读取 `sessions` 与 `users`；现有注册、登录和 `/me` 响应使用独立读取投影组合邮箱与显示名，不在认证查询中读取资料或密码。
+`users` 保存账号 ID、创建时间和独立的 `updated_at`；ID 使用 PostgreSQL `BIGINT GENERATED ALWAYS AS IDENTITY`，由 `INSERT … RETURNING id, created_at` 返回，Go 中为 `users.ID`（底层 `int64`）。应用和请求均不指定账号 ID；自增序列允许因事务回滚产生空洞，不承诺连续或代表提交顺序。账号、凭据、资料和偏好表的创建/更新时间均由数据库默认值和 trigger 维护；其中只有 `users` 保存账号级 `created_at`，凭据、资料和偏好各自保存独立的 `updated_at`。`password_credentials` 保存登录邮箱与密码哈希；`profiles` 保存显示名、可选昵称和独立版本；`preferences` 保存软偏好、硬约束默认值与另一套独立版本。注册先插入账号获得 ID，再在同一事务中创建凭据、资料、空偏好和 session；任何一步失败都不返回账号或令牌。session 的 `created_at` 由数据库生成，`expires_at` 由 Go 计算并传入。会话验证只读取 `sessions` 与 `users`；现有注册、登录和 `/me` 响应使用独立读取投影组合邮箱与显示名，不在认证查询中读取资料或密码。
 
 `00003_account_modules.sql` 从已合并的 00002 迁移现有数据，保留账号、密码哈希和会话。发现缺失密码凭据的账号时迁移会拒绝执行，需先修复数据；不要重置开发库绕过检查。曾运行过未合并旧版 00002 的数据库仍需先核对其 schema 与已合并版本一致。
 
