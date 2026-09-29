@@ -45,15 +45,25 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+
+CREATE FUNCTION sessions_stamp() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.created_at := clock_timestamp();
+    RETURN NEW;
+END;
+$$;
 -- +goose StatementEnd
 CREATE TRIGGER users_stamp BEFORE INSERT OR UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION users_stamp();
 CREATE TRIGGER credentials_stamp BEFORE INSERT OR UPDATE ON password_credentials
     FOR EACH ROW EXECUTE FUNCTION credentials_stamp();
+CREATE TRIGGER sessions_stamp BEFORE INSERT ON sessions
+    FOR EACH ROW EXECUTE FUNCTION sessions_stamp();
 
 -- +goose Down
 DROP TABLE sessions;
 DROP TABLE password_credentials;
 DROP FUNCTION credentials_stamp();
+DROP FUNCTION sessions_stamp();
 DROP FUNCTION users_stamp();
 DROP TABLE users;
