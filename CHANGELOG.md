@@ -12,5 +12,7 @@
 
 ### Removed
 
+### Added
+
 - 建立认证、个人资料、偏好和小组基础能力。
 - 建立 PostgreSQL 迁移、OpenAPI 契约、sqlc 生成和基础检查流程。
