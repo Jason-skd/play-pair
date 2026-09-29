@@ -164,8 +164,8 @@ Gin 解决入站请求的路由和响应，不是通用的出站 API 客户端�
 - `Profile`：显示名、可选昵称和独立版本；与 preference 分别维护。
 - `PasswordCredential`：与用户一对一的密码凭据，独立保存登录邮箱、密码哈希和更新时间。注册在同一事务中创建用户、凭据、资料、空偏好和会话；密码登录联表读取凭据，session 验证只查询会话和用户。
 - `Preference`：与 Profile 独立的一对一用户资源和版本。软偏好为喜欢、一般、不喜欢三栏自由文本，每栏最多 500 个 Unicode 字符，可全部留空；不要求每次接受邀请时重填。硬约束默认值仅为可空的人民币人均预算上限（整数分）和可空的轮椅通行要求。预算 null 与 0 不同；轮椅要求 null、false、true 分别表示未填写、明确无此要求、有此要求。不存在 Exclude 字段。保存默认值不表示授权任何 outing。
-- `Group`：小组标识、名称、加入码及创建者。
-- `GroupMembership`：用户与小组的关系、角色（initiator/member）、状态和加入时间。
+- `Group`：持久朋友圈，可承载多次 outing；保存数据库自增标识、规范化名称、唯一加入码、initiator_id、创建/更新时间和仅用于创建重试的 creation_key。发起者身份以 initiator_id 为唯一权威；同一发起者与 creation_key 唯一。
+- `GroupMembership`：group_id 与 member_id 联合主键、joined_at；行存在即有效，不保存 status/is_active 或角色。initiator/member 从 Group.initiator_id 派生，延迟联合外键保证发起者属于本组。成员展示资料读取当前 Profile 投影，不复制邮箱、资料或偏好。
 - `Outing`：小组下的活动协调实例、创建者、目标日期范围、Alpha 中发起者选择的活动时长、状态和确认方案；时间字段以数据库中的 UTC 瞬时点表示。Beta 的活动时长可以由每个候选的目录活动建议，不能假设所有候选共享一个时长。
 - `Invitation`：outing 对某个小组成员的邀请状态、响应时间，以及接受时确认的硬约束输入快照。
 - `MemberInput`：某个参与成员针对一次 outing 的可用时间、已授权硬约束、当前软偏好快照和提交版本。软偏好来自用户 preference，不要求重复填写。
@@ -207,7 +207,7 @@ TieBreak: not_needed | requested -> scored -> initiator_confirmed
 
 | 聚合根 | 负责的不变量 | 典型事务 |
 |---|---|---|
-| `Group` | 加入码唯一、成员角色和有效状态 | 建组、入组、角色变更 |
+| `Group` | 加入码唯一、成员关系唯一、发起者属于本组；角色派生、存在即有效 | 幂等建组、凭码入组；无角色管理入口 |
 | `Outing` | 发起者、邀请生命周期、输入提交资格和 outing 状态 | 创建 outing、响应邀请、确认成员输入、取消 outing |
 | `DecisionRun` | 运行快照、候选约束结果、provider 尝试和排名不可变 | 创建运行快照；每次外部尝试完成后的状态写回 |
 | `VoteSession` | 目标运行、预期投票成员、关闭规则和原始选票 | 提交/替换选票、关闭投票、记录平票辅助 |
@@ -300,7 +300,7 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 | 认证 | `POST /api/v1/auth/register`、`/login`、`/logout`、`GET /me` | 身份、session、错误映射 |
 | 展示资料 | `GET /api/v1/profile`、`PUT /api/v1/profile` | 显示名、可选昵称与独立版本；昵称优先 |
 | 偏好 | `GET /api/v1/preferences`、`PUT /api/v1/preferences` | 维护软偏好和可用于接受邀请快捷填入的硬约束默认值 |
-| 小组 | `POST /groups`、`POST /groups/{id}/join`、`GET /groups/{id}` | 加入码、成员权限、角色 |
+| 小组 | `POST /api/v1/groups`、`POST /api/v1/groups/join`、`GET /api/v1/groups/{groupId}`、`GET /api/v1/groups/{groupId}/members` | 建组幂等、只凭码加入、成员读取权限和分页；角色派生 |
 | outing | `POST /groups/{id}/outings`、`GET /outings/{id}` | 创建、读取、状态检查和发起者选择活动时长 |
 | 邀请 | `POST /outings/{id}/invitations/{member}/respond` | 接受/拒绝及幂等性 |
 | 输入 | `PUT /outings/{id}/input` | 接受时确认硬约束默认值、提交本次 outing 可用时间和修改后的硬约束 |
@@ -310,7 +310,11 @@ Beta 使用可排序投票。发起人参与投票，但不要求所有已接受
 | Beta 推荐 | `GET /candidates/{id}/recommendation` | 推荐文本状态和证据校验状态 |
 | Beta 投票 | `POST /outings/{id}/votes`、`POST /outings/{id}/votes/close`、`GET /outings/{id}/votes` | 排序选票、发起人提前关闭、AI 并列辅助和最终结果 |
 
-个人资料和偏好 PUT 已采用完整替换：必填键不可遗漏，可清空值必须明确发送 null 或空字符串；expectedVersion 与数据库当前版本匹配才可原子写入并递增，过期版本返回 409 version_conflict。两个资源均只允许当前登录用户读写，无目标 user ID 参数。注册事务创建两份版本 1 的资源，迁移为已有用户回填；读取不会隐式创建或确认资源。资料与偏好接口已实现，本节其他 outing/decision 接口仍为后续计划。
+个人资料和偏好 PUT 已采用完整替换：必填键不可遗漏，可清空值必须明确发送 null 或空字符串；expectedVersion 与数据库当前版本匹配才可原子写入并递增，过期版本返回 409 version_conflict。两个资源均只允许当前登录用户读写，无目标 user ID 参数。注册事务创建两份版本 1 的资源，迁移为已有用户回填；读取不会隐式创建或确认资源。资料、偏好和小组接口已实现，本节 outing/decision 接口仍为后续计划。
+
+小组创建要求 UUID Idempotency-Key：同用户同 key 同规范化名称重放为 200，首次为 201，不同名称为 409 idempotency_conflict；key 无过期机制。加入仅需 16 位 Base32 小组码，接受首尾空白和 ASCII 小写；所有成员可读取、分享码，登录用户持码直接入组，无审批。重复加入不改变成员或时间。小组及成员读取要求本组成员资格，成员列表按 memberId 升序，排他游标 afterMemberId，默认 50/最大 100。创建与加入分别按用户限流，每 10 分钟 20 次，POST 请求体上限 8 KiB，操作总时限 5 秒。
+
+Group.updated_at 由数据库 trigger 随真实小组/成员变化更新，成员跨组移动 touch 两组；使用 clock_timestamp 并保证不倒退，不是版本号。读取、重复加入、创建重放及 Profile/Preference 更新不改变该时间。本期不提供转让、踢人、退出、解散、账号注销、改名、码轮换或“我的小组”列表。00006 迁移只新增对象，无小组回填；部署先迁移后启动，Down 会丢失全部小组和成员数据。
 
 所有写接口应使用明确的资源版本或状态检查和幂等键（适用于可能重试的创建/运行请求），重复请求不能产生重复邀请、重复确认或重复投票。错误响应使用稳定的错误码，至少区分未认证、无权限、输入无效、状态冲突、无可行候选、provider 失败、超时和内部依赖失败。Alpha 决策成功才返回结果；请求 deadline 到期不伪装成已接受的后台任务。
 

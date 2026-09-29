@@ -19,6 +19,7 @@ const (
 	DependencyUnavailable ErrorResponseErrorCode = "dependency_unavailable"
 	EmailConflict         ErrorResponseErrorCode = "email_conflict"
 	Forbidden             ErrorResponseErrorCode = "forbidden"
+	IdempotencyConflict   ErrorResponseErrorCode = "idempotency_conflict"
 	InternalError         ErrorResponseErrorCode = "internal_error"
 	InvalidCredentials    ErrorResponseErrorCode = "invalid_credentials"
 	InvalidInput          ErrorResponseErrorCode = "invalid_input"
@@ -40,6 +41,8 @@ func (e ErrorResponseErrorCode) Valid() bool {
 		return true
 	case Forbidden:
 		return true
+	case IdempotencyConflict:
+		return true
 	case InternalError:
 		return true
 	case InvalidCredentials:
@@ -55,6 +58,24 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	case Unauthenticated:
 		return true
 	case VersionConflict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GroupMemberRole.
+const (
+	Initiator GroupMemberRole = "initiator"
+	Member    GroupMemberRole = "member"
+)
+
+// Valid indicates whether the value is a known member of the GroupMemberRole enum.
+func (e GroupMemberRole) Valid() bool {
+	switch e {
+	case Initiator:
+		return true
+	case Member:
 		return true
 	default:
 		return false
@@ -136,6 +157,36 @@ func (e RegisterParamsXPlayPairRequest) Valid() bool {
 	}
 }
 
+// Defines values for CreateGroupParamsXPlayPairRequest.
+const (
+	CreateGroupParamsXPlayPairRequestN1 CreateGroupParamsXPlayPairRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the CreateGroupParamsXPlayPairRequest enum.
+func (e CreateGroupParamsXPlayPairRequest) Valid() bool {
+	switch e {
+	case CreateGroupParamsXPlayPairRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for JoinGroupParamsXPlayPairRequest.
+const (
+	JoinGroupParamsXPlayPairRequestN1 JoinGroupParamsXPlayPairRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the JoinGroupParamsXPlayPairRequest enum.
+func (e JoinGroupParamsXPlayPairRequest) Valid() bool {
+	switch e {
+	case JoinGroupParamsXPlayPairRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PutPreferencesParamsXPlayPairRequest.
 const (
 	PutPreferencesParamsXPlayPairRequestN1 PutPreferencesParamsXPlayPairRequest = "1"
@@ -166,6 +217,12 @@ func (e PutProfileParamsXPlayPairRequest) Valid() bool {
 	}
 }
 
+// CreateGroupRequest defines model for CreateGroupRequest.
+type CreateGroupRequest struct {
+	// Name Trim surrounding Unicode whitespace; reject NUL and invalid UTF-8.
+	Name string `json:"name"`
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error struct {
@@ -177,6 +234,42 @@ type ErrorResponse struct {
 
 // ErrorResponseErrorCode defines model for ErrorResponse.Error.Code.
 type ErrorResponseErrorCode string
+
+// Group defines model for Group.
+type Group struct {
+	CreatedAt   time.Time `json:"createdAt"`
+	Id          int64     `json:"id"`
+	InitiatorId int64     `json:"initiatorId"`
+	JoinCode    string    `json:"joinCode"`
+	Name        string    `json:"name"`
+
+	// UpdatedAt Latest actual group or membership change; nondecreasing but not a version or commit sequence.
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// GroupMember defines model for GroupMember.
+type GroupMember struct {
+	DisplayName string    `json:"displayName"`
+	JoinedAt    time.Time `json:"joinedAt"`
+	MemberId    int64     `json:"memberId"`
+
+	// Nickname Prefer nickname for display when present.
+	Nickname *string `json:"nickname"`
+
+	// Role Derived solely from the group initiatorId.
+	Role GroupMemberRole `json:"role"`
+}
+
+// GroupMemberRole Derived solely from the group initiatorId.
+type GroupMemberRole string
+
+// GroupMemberPage defines model for GroupMemberPage.
+type GroupMemberPage struct {
+	Members []GroupMember `json:"members"`
+
+	// NextAfterMemberId Exclusive cursor; null when there is no next page.
+	NextAfterMemberId *int64 `json:"nextAfterMemberId"`
+}
 
 // HardDefaults Optional defaults only; saving does not authorize any outing. Currency is CNY, measured in fen.
 type HardDefaults struct {
@@ -191,6 +284,12 @@ type Health struct {
 
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
+
+// JoinGroupRequest defines model for JoinGroupRequest.
+type JoinGroupRequest struct {
+	// JoinCode Trim surrounding whitespace and uppercase ASCII before validating 16 Base32 characters. Never place in URLs or logs.
+	JoinCode string `json:"joinCode"`
+}
 
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
@@ -256,8 +355,14 @@ type User struct {
 // BrowserWriteHeader defines model for BrowserWriteHeader.
 type BrowserWriteHeader string
 
+// GroupId defines model for GroupId.
+type GroupId = int64
+
 // Error defines model for Error.
 type Error = ErrorResponse
+
+// GroupResponse defines model for GroupResponse.
+type GroupResponse = Group
 
 // Healthy defines model for Healthy.
 type Healthy = Health
@@ -289,6 +394,29 @@ type RegisterParams struct {
 // RegisterParamsXPlayPairRequest defines parameters for Register.
 type RegisterParamsXPlayPairRequest string
 
+// CreateGroupParams defines parameters for CreateGroup.
+type CreateGroupParams struct {
+	XPlayPairRequest CreateGroupParamsXPlayPairRequest `json:"X-PlayPair-Request"`
+	IdempotencyKey   openapi_types.UUID                `json:"Idempotency-Key"`
+}
+
+// CreateGroupParamsXPlayPairRequest defines parameters for CreateGroup.
+type CreateGroupParamsXPlayPairRequest string
+
+// JoinGroupParams defines parameters for JoinGroup.
+type JoinGroupParams struct {
+	XPlayPairRequest JoinGroupParamsXPlayPairRequest `json:"X-PlayPair-Request"`
+}
+
+// JoinGroupParamsXPlayPairRequest defines parameters for JoinGroup.
+type JoinGroupParamsXPlayPairRequest string
+
+// GetGroupMembersParams defines parameters for GetGroupMembers.
+type GetGroupMembersParams struct {
+	AfterMemberId *int64 `form:"afterMemberId,omitempty" json:"afterMemberId,omitempty"`
+	Limit         *int   `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // PutPreferencesParams defines parameters for PutPreferences.
 type PutPreferencesParams struct {
 	XPlayPairRequest PutPreferencesParamsXPlayPairRequest `json:"X-PlayPair-Request"`
@@ -311,6 +439,12 @@ type LoginJSONRequestBody = LoginRequest
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
 
+// CreateGroupJSONRequestBody defines body for CreateGroup for application/json ContentType.
+type CreateGroupJSONRequestBody = CreateGroupRequest
+
+// JoinGroupJSONRequestBody defines body for JoinGroup for application/json ContentType.
+type JoinGroupJSONRequestBody = JoinGroupRequest
+
 // PutPreferencesJSONRequestBody defines body for PutPreferences for application/json ContentType.
 type PutPreferencesJSONRequestBody = UpdatePreference
 
@@ -328,6 +462,18 @@ type ServerInterface interface {
 
 	// (POST /api/v1/auth/register)
 	Register(c *gin.Context, params RegisterParams)
+
+	// (POST /api/v1/groups)
+	CreateGroup(c *gin.Context, params CreateGroupParams)
+
+	// (POST /api/v1/groups/join)
+	JoinGroup(c *gin.Context, params JoinGroupParams)
+
+	// (GET /api/v1/groups/{groupId})
+	GetGroup(c *gin.Context, groupId GroupId)
+
+	// (GET /api/v1/groups/{groupId}/members)
+	GetGroupMembers(c *gin.Context, groupId GroupId, params GetGroupMembersParams)
 
 	// (GET /api/v1/me)
 	Me(c *gin.Context)
@@ -487,6 +633,183 @@ func (siw *ServerInterfaceWrapper) Register(c *gin.Context) {
 	}
 
 	siw.Handler.Register(c, params)
+}
+
+// CreateGroup operation middleware
+func (siw *ServerInterfaceWrapper) CreateGroup(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateGroupParams
+
+	headers := c.Request.Header
+
+	// ------------- Required header parameter "X-PlayPair-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-PlayPair-Request")]; found {
+		var XPlayPairRequest CreateGroupParamsXPlayPairRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-PlayPair-Request, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-PlayPair-Request", valueList[0], &XPlayPairRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-PlayPair-Request: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XPlayPairRequest = XPlayPairRequest
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter X-PlayPair-Request is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey openapi_types.UUID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Idempotency-Key, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: "uuid"})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Idempotency-Key: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter Idempotency-Key is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateGroup(c, params)
+}
+
+// JoinGroup operation middleware
+func (siw *ServerInterfaceWrapper) JoinGroup(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params JoinGroupParams
+
+	headers := c.Request.Header
+
+	// ------------- Required header parameter "X-PlayPair-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-PlayPair-Request")]; found {
+		var XPlayPairRequest JoinGroupParamsXPlayPairRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-PlayPair-Request, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-PlayPair-Request", valueList[0], &XPlayPairRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-PlayPair-Request: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XPlayPairRequest = XPlayPairRequest
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter X-PlayPair-Request is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.JoinGroup(c, params)
+}
+
+// GetGroup operation middleware
+func (siw *ServerInterfaceWrapper) GetGroup(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId GroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", c.Param("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter groupId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetGroup(c, groupId)
+}
+
+// GetGroupMembers operation middleware
+func (siw *ServerInterfaceWrapper) GetGroupMembers(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId GroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", c.Param("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter groupId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetGroupMembersParams
+
+	// ------------- Optional query parameter "afterMemberId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "afterMemberId", c.Request.URL.Query(), &params.AfterMemberId, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter afterMemberId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", c.Request.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetGroupMembers(c, groupId, params)
 }
 
 // Me operation middleware
@@ -667,6 +990,10 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
+	router.POST(options.BaseURL+"/api/v1/groups", wrapper.CreateGroup)
+	router.POST(options.BaseURL+"/api/v1/groups/join", wrapper.JoinGroup)
+	router.GET(options.BaseURL+"/api/v1/groups/:groupId", wrapper.GetGroup)
+	router.GET(options.BaseURL+"/api/v1/groups/:groupId/members", wrapper.GetGroupMembers)
 	router.POST(options.BaseURL+"/api/v1/auth/register", wrapper.Register)
 	router.POST(options.BaseURL+"/api/v1/auth/login", wrapper.Login)
 	router.POST(options.BaseURL+"/api/v1/auth/logout", wrapper.Logout)

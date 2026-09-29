@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Jason-skd/play-pair/internal/api/generated"
 	"github.com/gin-gonic/gin"
@@ -38,8 +39,16 @@ func decodeJSONLimit(c *gin.Context, dst any, limit int64) bool {
 // pointers alone cannot distinguish an omitted nullable field from explicit null.
 // Paths include parent objects so JSON null cannot silently become a zero struct.
 func decodeReplacement(c *gin.Context, dst any, required, nullable []string) bool {
+	return decodeReplacementLimit(c, dst, required, nullable, 32<<10)
+}
+
+func decodeReplacementLimit(c *gin.Context, dst any, required, nullable []string, limit int64) bool {
 	var raw json.RawMessage
-	if !decodeJSONLimit(c, &raw, 32<<10) {
+	if !decodeJSONLimit(c, &raw, limit) {
+		return false
+	}
+	if !utf8.Valid(raw) {
+		writeError(c, 400, generated.InvalidInput, "Invalid UTF-8")
 		return false
 	}
 	requiredFields, nullableFields := make(map[string]bool, len(required)), make(map[string]bool, len(nullable))

@@ -104,6 +104,13 @@ func TestRoutesMatchOpenAPI(t *testing.T) {
 	}
 	var want []string
 	for path, operations := range spec.Paths {
+		parts := strings.Split(path, "/")
+		for i, part := range parts {
+			if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+				parts[i] = ":" + strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}")
+			}
+		}
+		path = strings.Join(parts, "/")
 		for method := range operations {
 			want = append(want, method+" "+path)
 		}
