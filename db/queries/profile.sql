@@ -1,7 +1,7 @@
 -- name: GetProfile :one
-SELECT * FROM profiles WHERE user_id = $1;
+SELECT * FROM profiles WHERE user_id = @user_id;
 
 -- name: UpdateProfile :one
-UPDATE profiles SET display_name = $2, nickname = $3, version = version + 1
-WHERE user_id = $1 AND version = $4 AND version < 9223372036854775807
+UPDATE profiles SET display_name = @display_name, nickname = @nickname, version = version + 1
+WHERE user_id = @user_id AND version = @version AND version < 9223372036854775807
 RETURNING *;

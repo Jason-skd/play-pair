@@ -37,6 +37,7 @@ type Preference struct {
 	Dislikes                 string
 	MaxBudgetFen             pgtype.Int8
 	RequiresWheelchairAccess pgtype.Bool
+	UpdatedAt                pgtype.Timestamptz
 	Version                  int64
 	UserID                   int64
 }
@@ -44,6 +45,7 @@ type Preference struct {
 type Profile struct {
 	DisplayName string
 	Nickname    pgtype.Text
+	UpdatedAt   pgtype.Timestamptz
 	Version     int64
 	UserID      int64
 }
@@ -57,5 +59,6 @@ type Session struct {
 
 type User struct {
 	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 	ID        int64
 }

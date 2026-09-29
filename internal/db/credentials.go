@@ -23,12 +23,12 @@ func (db *DB) Register(ctx context.Context, command credentials.Registration, pe
 	}
 	defer tx.Rollback(ctx)
 	q := db.queries.WithTx(tx)
-	account, err := q.CreateUser(ctx, timestamp(command.CreatedAt))
+	account, err := q.CreateUser(ctx)
 	if err != nil {
 		return users.Account{}, dependency("create account", err)
 	}
 	id := account.ID
-	if err := q.CreatePasswordCredential(ctx, generated.CreatePasswordCredentialParams{UserID: id, Email: command.Email, PasswordHash: command.PasswordHash, UpdatedAt: timestamp(command.CreatedAt)}); err != nil {
+	if err := q.CreatePasswordCredential(ctx, generated.CreatePasswordCredentialParams{UserID: id, Email: command.Email, PasswordHash: command.PasswordHash}); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "password_credentials_email_key" {
 			return users.Account{}, credentials.ErrEmailConflict
@@ -41,7 +41,7 @@ func (db *DB) Register(ctx context.Context, command credentials.Registration, pe
 	if err := q.CreatePreference(ctx, id); err != nil {
 		return users.Account{}, dependency("create preference", err)
 	}
-	if err := q.CreateSession(ctx, generated.CreateSessionParams{UserID: id, TokenHash: pending.TokenHash[:], CreatedAt: timestamp(pending.CreatedAt), ExpiresAt: timestamp(pending.ExpiresAt)}); err != nil {
+	if err := q.CreateSession(ctx, generated.CreateSessionParams{UserID: id, TokenHash: pending.TokenHash[:], ExpiresAt: timestamp(pending.ExpiresAt)}); err != nil {
 		return users.Account{}, dependency("create registration session", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

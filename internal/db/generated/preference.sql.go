@@ -21,7 +21,7 @@ func (q *Queries) CreatePreference(ctx context.Context, userID int64) error {
 }
 
 const getPreference = `-- name: GetPreference :one
-SELECT likes, neutral, dislikes, max_budget_fen, requires_wheelchair_access, version, user_id FROM preferences WHERE user_id = $1
+SELECT likes, neutral, dislikes, max_budget_fen, requires_wheelchair_access, updated_at, version, user_id FROM preferences WHERE user_id = $1
 `
 
 func (q *Queries) GetPreference(ctx context.Context, userID int64) (Preference, error) {
@@ -33,6 +33,7 @@ func (q *Queries) GetPreference(ctx context.Context, userID int64) (Preference, 
 		&i.Dislikes,
 		&i.MaxBudgetFen,
 		&i.RequiresWheelchairAccess,
+		&i.UpdatedAt,
 		&i.Version,
 		&i.UserID,
 	)
@@ -41,30 +42,30 @@ func (q *Queries) GetPreference(ctx context.Context, userID int64) (Preference, 
 
 const updatePreference = `-- name: UpdatePreference :one
 UPDATE preferences
-SET likes = $2, neutral = $3, dislikes = $4, max_budget_fen = $5,
-    requires_wheelchair_access = $6, version = version + 1
-WHERE user_id = $1 AND version = $7 AND version < 9223372036854775807
-RETURNING likes, neutral, dislikes, max_budget_fen, requires_wheelchair_access, version, user_id
+SET likes = $1, neutral = $2, dislikes = $3, max_budget_fen = $4,
+    requires_wheelchair_access = $5, version = version + 1
+WHERE user_id = $6 AND version = $7 AND version < 9223372036854775807
+RETURNING likes, neutral, dislikes, max_budget_fen, requires_wheelchair_access, updated_at, version, user_id
 `
 
 type UpdatePreferenceParams struct {
-	UserID                   int64
 	Likes                    string
 	Neutral                  string
 	Dislikes                 string
 	MaxBudgetFen             pgtype.Int8
 	RequiresWheelchairAccess pgtype.Bool
+	UserID                   int64
 	Version                  int64
 }
 
 func (q *Queries) UpdatePreference(ctx context.Context, arg UpdatePreferenceParams) (Preference, error) {
 	row := q.db.QueryRow(ctx, updatePreference,
-		arg.UserID,
 		arg.Likes,
 		arg.Neutral,
 		arg.Dislikes,
 		arg.MaxBudgetFen,
 		arg.RequiresWheelchairAccess,
+		arg.UserID,
 		arg.Version,
 	)
 	var i Preference
@@ -74,6 +75,7 @@ func (q *Queries) UpdatePreference(ctx context.Context, arg UpdatePreferencePara
 		&i.Dislikes,
 		&i.MaxBudgetFen,
 		&i.RequiresWheelchairAccess,
+		&i.UpdatedAt,
 		&i.Version,
 		&i.UserID,
 	)

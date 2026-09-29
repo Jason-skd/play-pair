@@ -86,7 +86,7 @@ func TestIdentityMigration(t *testing.T) {
 					maximum = max(maximum, id)
 					// Verify the current generated authentication query still resolves
 					// a token issued before the UUID-to-integer migration.
-					got, err := generated.New(conn).FindSessionUser(ctx, generated.FindSessionUserParams{TokenHash: digest, ExpiresAt: timestamp(now)})
+					got, err := generated.New(conn).FindSessionUser(ctx, generated.FindSessionUserParams{TokenHash: digest, Now: timestamp(now)})
 					if err != nil || got.ID != id {
 						t.Fatalf("old session no longer authenticates: %#v %v", got, err)
 					}
@@ -94,8 +94,8 @@ func TestIdentityMigration(t *testing.T) {
 			}
 
 			q := generated.New(conn)
-			account, err := q.CreateUser(ctx, timestamp(now))
-			if err != nil || account.ID <= maximum || !account.CreatedAt.Time.Equal(now) {
+			account, err := q.CreateUser(ctx)
+			if err != nil || account.ID <= maximum || account.CreatedAt.Time.IsZero() {
 				t.Fatalf("INSERT RETURNING did not allocate a fresh identity: %#v %v", account, err)
 			}
 			// GENERATED ALWAYS must reject caller-chosen IDs, even valid integers.
@@ -124,14 +124,14 @@ func TestIdentityMigration(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer tx.Rollback(ctx)
-			abandoned, err := q.WithTx(tx).CreateUser(ctx, timestamp(now))
+			abandoned, err := q.WithTx(tx).CreateUser(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := tx.Rollback(ctx); err != nil {
 				t.Fatal(err)
 			}
-			next, err := q.CreateUser(ctx, timestamp(now))
+			next, err := q.CreateUser(ctx)
 			if err != nil || next.ID <= abandoned.ID || abandoned.ID <= account.ID {
 				t.Fatalf("identity sequence reused an ID: %d %d %#v %v", account.ID, abandoned.ID, next, err)
 			}

@@ -37,7 +37,7 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u.ID <= 0 || !u.CreatedAt.Equal(now) {
+	if u.ID <= 0 || u.CreatedAt.IsZero() {
 		t.Fatalf("registration did not return its persisted identity: %#v", u)
 	}
 	defer func() {
@@ -53,8 +53,8 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 	if err := database.pool.QueryRow(ctx, "SELECT password_hash, updated_at FROM password_credentials WHERE user_id = $1", u.ID).Scan(&hash, &updatedAt); err != nil {
 		t.Fatal(err)
 	}
-	if hash == "" || hash == "correct horse battery" || !updatedAt.Equal(now) {
-		t.Fatal("credential must contain a hash and the registration timestamp")
+	if hash == "" || hash == "correct horse battery" || updatedAt.IsZero() {
+		t.Fatal("credential must contain a hash and a database timestamp")
 	}
 	if _, _, _, err := service.Login(ctx, email, "correct horse battery"); err != nil {
 		t.Fatalf("password login: %v", err)
@@ -66,8 +66,8 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 		t.Fatalf("duplicate: %v", err)
 	}
 	var accounts int
-	if err := database.pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE created_at=$1", now).Scan(&accounts); err != nil || accounts != 1 {
-		t.Fatalf("duplicate email left an allocated account: count=%d err=%v", accounts, err)
+	if err := database.pool.QueryRow(ctx, "SELECT count(*) FROM password_credentials WHERE email=$1", email).Scan(&accounts); err != nil || accounts != 1 {
+		t.Fatalf("duplicate email left an allocated credential: count=%d err=%v", accounts, err)
 	}
 	if _, err := database.pool.Exec(ctx, "DELETE FROM password_credentials WHERE user_id = $1", u.ID); err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 		defer func() {
 			cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
 			defer stop()
-			if _, err := database.pool.Exec(cleanup, "DELETE FROM users WHERE created_at = $1", createdAt); err != nil {
+			if _, err := database.pool.Exec(cleanup, "DELETE FROM users WHERE id IN (SELECT user_id FROM password_credentials WHERE email = $1)", rollbackEmail); err != nil {
 				t.Errorf("cleanup rollback fixture: %v", err)
 			}
 		}()
@@ -109,7 +109,7 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 		}
 		var users, credentials, sessions, profiles int
 		if err := database.pool.QueryRow(ctx, `SELECT
-			(SELECT count(*) FROM users WHERE created_at = $1),
+			(SELECT count(*) FROM users WHERE id IN (SELECT user_id FROM password_credentials WHERE email = $2)),
 			(SELECT count(*) FROM password_credentials WHERE email = $2),
 			(SELECT count(*) FROM sessions WHERE token_hash = $3),
 			(SELECT count(*) FROM profiles WHERE display_name = $2)`, createdAt, rollbackEmail, digest[:]).Scan(&users, &credentials, &sessions, &profiles); err != nil {
