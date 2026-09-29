@@ -1,12 +1,12 @@
 -- name: CreatePreference :exec
-INSERT INTO preferences (user_id) VALUES ($1);
+INSERT INTO preferences (user_id) VALUES (@user_id);
 
 -- name: GetPreference :one
-SELECT * FROM preferences WHERE user_id = $1;
+SELECT * FROM preferences WHERE user_id = @user_id;
 
 -- name: UpdatePreference :one
 UPDATE preferences
-SET likes = $2, neutral = $3, dislikes = $4, max_budget_fen = $5,
-    requires_wheelchair_access = $6, version = version + 1
-WHERE user_id = $1 AND version = $7 AND version < 9223372036854775807
+SET likes = @likes, neutral = @neutral, dislikes = @dislikes, max_budget_fen = @max_budget_fen,
+    requires_wheelchair_access = @requires_wheelchair_access, version = version + 1
+WHERE user_id = @user_id AND version = @version AND version < 9223372036854775807
 RETURNING *;

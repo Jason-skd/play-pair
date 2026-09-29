@@ -17,9 +17,22 @@ CREATE TABLE profiles (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     display_name TEXT NOT NULL CHECK (char_length(display_name) BETWEEN 1 AND 80),
     nickname TEXT CHECK (nickname IS NULL OR char_length(nickname) BETWEEN 1 AND 80),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     version BIGINT NOT NULL DEFAULT 1 CHECK (version > 0)
 );
 INSERT INTO profiles (user_id, display_name) SELECT id, display_name FROM users;
+-- +goose StatementBegin
+CREATE FUNCTION profiles_stamp() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' OR NEW IS DISTINCT FROM OLD THEN
+        NEW.updated_at := CASE WHEN TG_OP = 'INSERT' THEN clock_timestamp() ELSE greatest(OLD.updated_at, clock_timestamp()) END;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER profiles_stamp BEFORE INSERT OR UPDATE ON profiles
+    FOR EACH ROW EXECUTE FUNCTION profiles_stamp();
 ALTER TABLE users DROP COLUMN email, DROP COLUMN display_name;
 
 -- +goose Down
@@ -31,3 +44,4 @@ ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
 ALTER TABLE users ADD CONSTRAINT users_display_name_check CHECK (char_length(display_name) BETWEEN 1 AND 80);
 ALTER TABLE password_credentials DROP COLUMN email;
 DROP TABLE profiles;
+DROP FUNCTION profiles_stamp();

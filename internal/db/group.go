@@ -133,7 +133,7 @@ func (db *DB) JoinGroup(ctx context.Context, actor users.ID, code string) (group
 	return groupResult(v), nil
 }
 func (db *DB) groupAccess(ctx context.Context, actor users.ID, id group.ID) error {
-	allowed, err := db.queries.GroupAccess(ctx, generated.GroupAccessParams{ID: int64(id), Actor: int64(actor)})
+	allowed, err := db.queries.GroupAccess(ctx, generated.GroupAccessParams{GroupID: int64(id), Actor: int64(actor)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errs.NotFound
 	}
@@ -149,7 +149,7 @@ func (db *DB) GetGroup(ctx context.Context, actor users.ID, id group.ID) (group.
 	if err := db.groupAccess(ctx, actor, id); err != nil {
 		return group.Group{}, err
 	}
-	v, err := db.queries.ReadAuthorizedGroup(ctx, generated.ReadAuthorizedGroupParams{ID: int64(id), Actor: int64(actor)})
+	v, err := db.queries.ReadAuthorizedGroup(ctx, generated.ReadAuthorizedGroupParams{GroupID: int64(id), Actor: int64(actor)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return group.Group{}, group.ErrForbidden
 	}

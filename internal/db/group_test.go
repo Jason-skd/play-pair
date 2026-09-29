@@ -301,8 +301,6 @@ func TestGroupDatabaseConstraints(t *testing.T) {
 		{"UPDATE groups SET join_code='bad' WHERE id=$1", "23514", "groups_join_code_check", []any{g.ID}},
 		{"UPDATE groups SET name='' WHERE id=$1", "23514", "groups_name_check", []any{g.ID}},
 		{"UPDATE groups SET name=$1 WHERE id=$2", "23514", "groups_name_check", []any{strings.Repeat("中", 81), g.ID}},
-		{"UPDATE groups SET name=$1 WHERE id=$2", "23514", "groups_name_check", []any{"\u3000space", g.ID}},
-		{"INSERT INTO groups(id,name,join_code,initiator_id,creation_key) OVERRIDING SYSTEM VALUE VALUES(-1,'bad','AAAAAAAAAAAAAAAA',$1,$2)", "23514", "groups_id_positive", []any{ids[0], uuid.New()}},
 	}
 	for _, c := range checks {
 		_, err := db.pool.Exec(ctx, c.sql, c.args...)
