@@ -109,10 +109,10 @@ func TestAuthRepositoryRealDatabase(t *testing.T) {
 		}
 		var users, credentials, sessions, profiles int
 		if err := database.pool.QueryRow(ctx, `SELECT
-			(SELECT count(*) FROM users WHERE id IN (SELECT user_id FROM password_credentials WHERE email = $2)),
-			(SELECT count(*) FROM password_credentials WHERE email = $2),
-			(SELECT count(*) FROM sessions WHERE token_hash = $3),
-			(SELECT count(*) FROM profiles WHERE display_name = $2)`, createdAt, rollbackEmail, digest[:]).Scan(&users, &credentials, &sessions, &profiles); err != nil {
+			(SELECT count(*) FROM users WHERE id IN (SELECT user_id FROM password_credentials WHERE email = $1)),
+			(SELECT count(*) FROM password_credentials WHERE email = $1),
+			(SELECT count(*) FROM sessions WHERE token_hash = $2),
+			(SELECT count(*) FROM profiles WHERE display_name = $1)`, rollbackEmail, digest[:]).Scan(&users, &credentials, &sessions, &profiles); err != nil {
 			t.Fatal(err)
 		}
 		if users != 0 || credentials != 0 || sessions != 0 || profiles != 0 {
