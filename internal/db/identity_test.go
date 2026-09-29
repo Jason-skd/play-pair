@@ -76,8 +76,8 @@ func TestIdentityMigration(t *testing.T) {
 					if id <= 0 || seen[id] || hash != fmt.Sprintf("hash%d", i) || name != fmt.Sprintf("Name%d", i) || nickname != fmt.Sprintf("Nick%d", i) || likes != fmt.Sprintf("喜欢%d", i) || neutral != "一般" || dislikes != "不喜欢" || profileVersion != int64(i+1) || preferenceVersion != int64(i+3) {
 						t.Fatal("migration lost or mixed account data")
 					}
-					if !created.Equal(now) || updated.IsZero() || !sessionCreated.Equal(now) || !expires.Equal(now.Add(time.Hour)) {
-						t.Fatal("migration changed account or session timestamps")
+					if created.IsZero() || updated.IsZero() || sessionCreated.IsZero() || !expires.Equal(now.Add(time.Hour)) {
+						t.Fatal("migration lost database-owned or application-owned timestamps")
 					}
 					if i == 1 && (budget == nil || *budget != 0 || access == nil || *access) || i == 2 && (budget != nil || access != nil) {
 						t.Fatal("migration lost nullable preference semantics")
