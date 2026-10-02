@@ -3,6 +3,78 @@ info:
   title: PlayPair API
   version: 0.1.0
 paths:
+  /api/v1/groups/{groupId}/outings:
+    post:
+      operationId: createOuting
+      description: Any group member may publish. Atomically invites all members, including the publisher. Same actor/key/content replays with 200; different content returns 409. Dates are sorted and deduplicated. No implicit timezone. Body limit 64 KiB; 20 writes per actor and operation per 10 minutes.
+      security: [{CookieSession: []}]
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+        - $ref: '#/components/parameters/BrowserWriteHeader'
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateOutingRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/OutingResponse'}
+        '200': {$ref: '#/components/responses/OutingResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/outings/{outingId}:
+    get:
+      operationId: getOuting
+      description: Group members only. Includes only the current user's inputs. Status is computed at response time; archived at startsAt, not endsAt. Arrangement is immutable and has no creation endpoint in this release.
+      security: [{CookieSession: []}]
+      parameters:
+        - $ref: '#/components/parameters/OutingId'
+      responses:
+        '200': {$ref: '#/components/responses/OutingResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/outings/{outingId}/invitations:
+    get:
+      operationId: getOutingInvitations
+      description: Group members only. Summaries exclude every member's input. Cursor orders by outingId, memberId, phase.
+      security: [{CookieSession: []}]
+      parameters:
+        - $ref: '#/components/parameters/OutingId'
+        - $ref: '#/components/parameters/InvitationCursor'
+        - $ref: '#/components/parameters/InvitationLimit'
+      responses:
+        '200': {$ref: '#/components/responses/InvitationPageResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/me/invitations:
+    get:
+      operationId: getMyInvitations
+      description: Current user's invitations in both rounds, including historical responses. Joining a group adds the current round for outings not yet archived. No push notifications.
+      security: [{CookieSession: []}]
+      parameters:
+        - $ref: '#/components/parameters/InvitationCursor'
+        - $ref: '#/components/parameters/InvitationLimit'
+      responses:
+        '200': {$ref: '#/components/responses/InvitationPageResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/outings/{outingId}/invitations/{phase}:
+    put:
+      operationId: respondOuting
+      description: Respond only for the authenticated member. Decision acceptance requires complete input; confirmation acceptance and all refusals forbid input. Use rejected before acceptance, declined after acceptance; both may accept again. Input changes retain acceptedAt; refusal clears it. Identical normalized retries preserve timestamps/version, otherwise expectedVersion must match. Version is an opaque increasing revision. Previous rounds are frozen and archived outings reject writes, even retries. Phase/cutoff checks use database time after locks. Body limit 64 KiB; 20 writes per actor and operation per 10 minutes.
+      security: [{CookieSession: []}]
+      parameters:
+        - $ref: '#/components/parameters/OutingId'
+        - {name: phase, in: path, required: true, schema: {$ref: '#/components/schemas/InvitationPhase'}}
+        - $ref: '#/components/parameters/BrowserWriteHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RespondOutingRequest'}
+      responses:
+        '200':
+          description: Current response including own input when applicable
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Invitation'}
+        default: {$ref: '#/components/responses/Error'}
   /api/v1/groups:
     post:
       operationId: createGroup
@@ -198,6 +270,19 @@ components:
       in: cookie
       name: playpair_session
   parameters:
+    OutingId:
+      name: outingId
+      in: path
+      required: true
+      schema: {type: integer, format: int64, minimum: 1}
+    InvitationCursor:
+      name: cursor
+      in: query
+      schema: {type: string, minLength: 1, maxLength: 128}
+    InvitationLimit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
     GroupId:
       name: groupId
       in: path
@@ -209,6 +294,16 @@ components:
       required: true
       schema: {type: string, enum: ['1']}
   responses:
+    OutingResponse:
+      description: Outing visible to the authenticated group member
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Outing'}
+    InvitationPageResponse:
+      description: Invitation summaries without private inputs
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/InvitationPage'}
     GroupResponse:
       description: Group visible to the authenticated member
       headers:
@@ -244,6 +339,105 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    CreateOutingRequest:
+      type: object
+      additionalProperties: false
+      required: [dates, timezone, durationMinutes]
+      properties:
+        dates:
+          type: array
+          minItems: 1
+          maxItems: 31
+          items: {type: string, format: date}
+        timezone: {type: string, minLength: 1, description: Publisher's explicit IANA timezone; immutable outing standard. Local and server defaults are forbidden.}
+        durationMinutes: {type: integer, minimum: 30, maximum: 1440, multipleOf: 30}
+    OutingStatus:
+      type: string
+      enum: [decision, confirmation, archived]
+    InvitationPhase:
+      type: string
+      enum: [decision, confirmation]
+    InvitationStatus:
+      type: string
+      enum: [pending, accepted, rejected, declined]
+    Arrangement:
+      type: object
+      additionalProperties: false
+      required: [startsAt, endsAt, place, activity]
+      properties:
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: string, format: date-time}
+        place: {type: string, minLength: 1}
+        activity: {type: string, minLength: 1}
+    Outing:
+      type: object
+      additionalProperties: false
+      required: [id, groupId, initiatorId, timezone, dates, durationMinutes, createdAt, status, arrangement, invitations]
+      properties:
+        id: {type: integer, format: int64}
+        groupId: {type: integer, format: int64}
+        initiatorId: {type: integer, format: int64}
+        timezone: {type: string}
+        dates: {type: array, items: {type: string, format: date}}
+        durationMinutes: {type: integer}
+        createdAt: {type: string, format: date-time}
+        status: {$ref: '#/components/schemas/OutingStatus'}
+        arrangement:
+          allOf: [{$ref: '#/components/schemas/Arrangement'}]
+          nullable: true
+        invitations:
+          type: array
+          description: Only the current user's rounds and input.
+          items: {$ref: '#/components/schemas/Invitation'}
+    Availability:
+      type: object
+      additionalProperties: false
+      required: [date, startTime, endTime]
+      description: Closed same-day interval in the outing timezone, start strictly before end. Overlaps and shared endpoints merge. Cross-day or reversed requests are rejected, never split. DST gaps and ambiguous wall times are rejected. 24:00 means next midnight and is allowed only as an end boundary.
+      properties:
+        date: {type: string, format: date}
+        startTime: {type: string, pattern: '^([01][0-9]|2[0-3]):(00|30)$'}
+        endTime: {type: string, pattern: '^(([01][0-9]|2[0-3]):(00|30)|24:00)$'}
+    MemberInput:
+      type: object
+      additionalProperties: false
+      required: [maxBudgetFen, requiresWheelchairAccess, availability]
+      properties:
+        maxBudgetFen: {type: integer, format: int64, minimum: 0, description: Explicit CNY budget in fen; zero is a valid zero-cost limit.}
+        requiresWheelchairAccess: {type: boolean}
+        availability:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: {$ref: '#/components/schemas/Availability'}
+    RespondOutingRequest:
+      type: object
+      additionalProperties: false
+      required: [status, expectedVersion]
+      properties:
+        status: {type: string, enum: [accepted, rejected, declined]}
+        expectedVersion: {type: integer, format: int64, minimum: 1, maximum: 9223372036854775806}
+        input: {$ref: '#/components/schemas/MemberInput'}
+    Invitation:
+      type: object
+      additionalProperties: false
+      required: [outingId, memberId, phase, status, version, acceptedAt, updatedAt]
+      properties:
+        outingId: {type: integer, format: int64}
+        memberId: {type: integer, format: int64}
+        phase: {$ref: '#/components/schemas/InvitationPhase'}
+        status: {$ref: '#/components/schemas/InvitationStatus'}
+        version: {type: integer, format: int64}
+        acceptedAt: {type: string, format: date-time, nullable: true}
+        updatedAt: {type: string, format: date-time}
+        input: {$ref: '#/components/schemas/MemberInput'}
+    InvitationPage:
+      type: object
+      additionalProperties: false
+      required: [invitations]
+      properties:
+        invitations: {type: array, items: {$ref: '#/components/schemas/Invitation'}}
+        nextCursor: {type: string}
     CreateGroupRequest:
       type: object
       additionalProperties: false
@@ -376,6 +570,6 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_input, idempotency_conflict, version_conflict, email_conflict, invalid_credentials, unauthenticated, forbidden, rate_limited, csrf_rejected, dependency_unavailable, not_found, method_not_allowed, internal_error]
+              enum: [invalid_availability, phase_conflict, outing_archived, invalid_input, idempotency_conflict, version_conflict, email_conflict, invalid_credentials, unauthenticated, forbidden, rate_limited, csrf_rejected, dependency_unavailable, not_found, method_not_allowed, internal_error]
             message: {type: string, minLength: 1}
             requestId: {type: string, minLength: 1}

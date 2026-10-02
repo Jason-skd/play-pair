@@ -44,10 +44,16 @@ make generate
 - [`internal/profile/`](internal/profile/)：个人展示资料。
 - [`internal/preference/`](internal/preference/)：偏好及其版本。
 - [`internal/group/`](internal/group/)：小组和成员关系。
+- [`internal/outing/`](internal/outing/)：两轮邀请、本次硬约束和基于已确定安排的运行时状态。
 - [`internal/config/`](internal/config/)：启动配置解析和校验。
 - [`internal/db/`](internal/db/)：数据库连接、查询 adapter 和生成代码。
 - [`api/`](api/)：HTTP 契约及其生成配置。
 - [`db/`](db/)：数据库迁移和 SQL 查询源文件。
+
+Outing 的日期和空闲时段使用创建时指定的 IANA 时区；服务端返回该时区。
+归档状态由安排的开始时间计算，不持久化，也不需要定时归档任务。
+展示使用应用时钟，写入截止由数据库在取得锁后检查；部署时应保持应用与数据库时钟同步。
+已确定安排目前只有数据库结构，方案确认的应用入口由后续工作交付。
 
 ## 文档索引
 

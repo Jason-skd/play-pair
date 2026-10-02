@@ -9,6 +9,7 @@ import (
 	"github.com/Jason-skd/play-pair/internal/api/generated"
 	"github.com/Jason-skd/play-pair/internal/credentials"
 	"github.com/Jason-skd/play-pair/internal/group"
+	"github.com/Jason-skd/play-pair/internal/outing"
 	"github.com/Jason-skd/play-pair/internal/preference"
 	"github.com/Jason-skd/play-pair/internal/profile"
 	"github.com/Jason-skd/play-pair/internal/session"
@@ -27,6 +28,7 @@ type UserReader interface {
 // Services supplies the router's explicit dependencies, assembled by the caller.
 // Account authentication stays separate from display and preference operations.
 type Services struct {
+	Outings     *outing.Service
 	Groups      *group.Service
 	Preferences *preference.Service
 	Profiles    *profile.Service
@@ -61,6 +63,12 @@ func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, services
 	}}
 	groups := r.Group("/api/v1/groups", func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.Next() }, s.requireUser())
 	groups.POST("", wrapper.CreateGroup)
+	groups.POST("/:groupId/outings", wrapper.CreateOuting)
+	outings := r.Group("/api/v1/outings", func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.Next() }, s.requireUser())
+	outings.GET("/:outingId", wrapper.GetOuting)
+	outings.GET("/:outingId/invitations", wrapper.GetOutingInvitations)
+	outings.PUT("/:outingId/invitations/:phase", wrapper.RespondOuting)
+	r.GET("/api/v1/me/invitations", s.requireUser(), wrapper.GetMyInvitations)
 	groups.POST("/join", wrapper.JoinGroup)
 	groups.GET("/:groupId", wrapper.GetGroup)
 	groups.GET("/:groupId/members", wrapper.GetGroupMembers)

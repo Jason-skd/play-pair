@@ -21,10 +21,13 @@ const (
 	Forbidden             ErrorResponseErrorCode = "forbidden"
 	IdempotencyConflict   ErrorResponseErrorCode = "idempotency_conflict"
 	InternalError         ErrorResponseErrorCode = "internal_error"
+	InvalidAvailability   ErrorResponseErrorCode = "invalid_availability"
 	InvalidCredentials    ErrorResponseErrorCode = "invalid_credentials"
 	InvalidInput          ErrorResponseErrorCode = "invalid_input"
 	MethodNotAllowed      ErrorResponseErrorCode = "method_not_allowed"
 	NotFound              ErrorResponseErrorCode = "not_found"
+	OutingArchived        ErrorResponseErrorCode = "outing_archived"
+	PhaseConflict         ErrorResponseErrorCode = "phase_conflict"
 	RateLimited           ErrorResponseErrorCode = "rate_limited"
 	Unauthenticated       ErrorResponseErrorCode = "unauthenticated"
 	VersionConflict       ErrorResponseErrorCode = "version_conflict"
@@ -45,6 +48,8 @@ func (e ErrorResponseErrorCode) Valid() bool {
 		return true
 	case InternalError:
 		return true
+	case InvalidAvailability:
+		return true
 	case InvalidCredentials:
 		return true
 	case InvalidInput:
@@ -52,6 +57,10 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	case MethodNotAllowed:
 		return true
 	case NotFound:
+		return true
+	case OutingArchived:
+		return true
+	case PhaseConflict:
 		return true
 	case RateLimited:
 		return true
@@ -91,6 +100,90 @@ const (
 func (e HealthStatus) Valid() bool {
 	switch e {
 	case Ok:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InvitationPhase.
+const (
+	InvitationPhaseConfirmation InvitationPhase = "confirmation"
+	InvitationPhaseDecision     InvitationPhase = "decision"
+)
+
+// Valid indicates whether the value is a known member of the InvitationPhase enum.
+func (e InvitationPhase) Valid() bool {
+	switch e {
+	case InvitationPhaseConfirmation:
+		return true
+	case InvitationPhaseDecision:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InvitationStatus.
+const (
+	InvitationStatusAccepted InvitationStatus = "accepted"
+	InvitationStatusDeclined InvitationStatus = "declined"
+	InvitationStatusPending  InvitationStatus = "pending"
+	InvitationStatusRejected InvitationStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the InvitationStatus enum.
+func (e InvitationStatus) Valid() bool {
+	switch e {
+	case InvitationStatusAccepted:
+		return true
+	case InvitationStatusDeclined:
+		return true
+	case InvitationStatusPending:
+		return true
+	case InvitationStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OutingStatus.
+const (
+	OutingStatusArchived     OutingStatus = "archived"
+	OutingStatusConfirmation OutingStatus = "confirmation"
+	OutingStatusDecision     OutingStatus = "decision"
+)
+
+// Valid indicates whether the value is a known member of the OutingStatus enum.
+func (e OutingStatus) Valid() bool {
+	switch e {
+	case OutingStatusArchived:
+		return true
+	case OutingStatusConfirmation:
+		return true
+	case OutingStatusDecision:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RespondOutingRequestStatus.
+const (
+	RespondOutingRequestStatusAccepted RespondOutingRequestStatus = "accepted"
+	RespondOutingRequestStatusDeclined RespondOutingRequestStatus = "declined"
+	RespondOutingRequestStatusRejected RespondOutingRequestStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the RespondOutingRequestStatus enum.
+func (e RespondOutingRequestStatus) Valid() bool {
+	switch e {
+	case RespondOutingRequestStatusAccepted:
+		return true
+	case RespondOutingRequestStatusDeclined:
+		return true
+	case RespondOutingRequestStatusRejected:
 		return true
 	default:
 		return false
@@ -187,6 +280,36 @@ func (e JoinGroupParamsXPlayPairRequest) Valid() bool {
 	}
 }
 
+// Defines values for CreateOutingParamsXPlayPairRequest.
+const (
+	CreateOutingParamsXPlayPairRequestN1 CreateOutingParamsXPlayPairRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the CreateOutingParamsXPlayPairRequest enum.
+func (e CreateOutingParamsXPlayPairRequest) Valid() bool {
+	switch e {
+	case CreateOutingParamsXPlayPairRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RespondOutingParamsXPlayPairRequest.
+const (
+	RespondOutingParamsXPlayPairRequestN1 RespondOutingParamsXPlayPairRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the RespondOutingParamsXPlayPairRequest enum.
+func (e RespondOutingParamsXPlayPairRequest) Valid() bool {
+	switch e {
+	case RespondOutingParamsXPlayPairRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PutPreferencesParamsXPlayPairRequest.
 const (
 	PutPreferencesParamsXPlayPairRequestN1 PutPreferencesParamsXPlayPairRequest = "1"
@@ -217,10 +340,34 @@ func (e PutProfileParamsXPlayPairRequest) Valid() bool {
 	}
 }
 
+// Arrangement defines model for Arrangement.
+type Arrangement struct {
+	Activity string    `json:"activity"`
+	EndsAt   time.Time `json:"endsAt"`
+	Place    string    `json:"place"`
+	StartsAt time.Time `json:"startsAt"`
+}
+
+// Availability Closed same-day interval in the outing timezone, start strictly before end. Overlaps and shared endpoints merge. Cross-day or reversed requests are rejected, never split. DST gaps and ambiguous wall times are rejected. 24:00 means next midnight and is allowed only as an end boundary.
+type Availability struct {
+	Date      openapi_types.Date `json:"date"`
+	EndTime   string             `json:"endTime"`
+	StartTime string             `json:"startTime"`
+}
+
 // CreateGroupRequest defines model for CreateGroupRequest.
 type CreateGroupRequest struct {
 	// Name Trim surrounding Unicode whitespace; reject NUL and invalid UTF-8.
 	Name string `json:"name"`
+}
+
+// CreateOutingRequest defines model for CreateOutingRequest.
+type CreateOutingRequest struct {
+	Dates           []openapi_types.Date `json:"dates"`
+	DurationMinutes int                  `json:"durationMinutes"`
+
+	// Timezone Publisher's explicit IANA timezone; immutable outing standard. Local and server defaults are forbidden.
+	Timezone string `json:"timezone"`
 }
 
 // ErrorResponse defines model for ErrorResponse.
@@ -285,6 +432,30 @@ type Health struct {
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
 
+// Invitation defines model for Invitation.
+type Invitation struct {
+	AcceptedAt *time.Time       `json:"acceptedAt"`
+	Input      *MemberInput     `json:"input,omitempty"`
+	MemberId   int64            `json:"memberId"`
+	OutingId   int64            `json:"outingId"`
+	Phase      InvitationPhase  `json:"phase"`
+	Status     InvitationStatus `json:"status"`
+	UpdatedAt  time.Time        `json:"updatedAt"`
+	Version    int64            `json:"version"`
+}
+
+// InvitationPage defines model for InvitationPage.
+type InvitationPage struct {
+	Invitations []Invitation `json:"invitations"`
+	NextCursor  *string      `json:"nextCursor,omitempty"`
+}
+
+// InvitationPhase defines model for InvitationPhase.
+type InvitationPhase string
+
+// InvitationStatus defines model for InvitationStatus.
+type InvitationStatus string
+
 // JoinGroupRequest defines model for JoinGroupRequest.
 type JoinGroupRequest struct {
 	// JoinCode Trim surrounding whitespace and uppercase ASCII before validating 16 Base32 characters. Never place in URLs or logs.
@@ -296,6 +467,34 @@ type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
+
+// MemberInput defines model for MemberInput.
+type MemberInput struct {
+	Availability []Availability `json:"availability"`
+
+	// MaxBudgetFen Explicit CNY budget in fen; zero is a valid zero-cost limit.
+	MaxBudgetFen             int64 `json:"maxBudgetFen"`
+	RequiresWheelchairAccess bool  `json:"requiresWheelchairAccess"`
+}
+
+// Outing defines model for Outing.
+type Outing struct {
+	Arrangement     *Arrangement         `json:"arrangement"`
+	CreatedAt       time.Time            `json:"createdAt"`
+	Dates           []openapi_types.Date `json:"dates"`
+	DurationMinutes int                  `json:"durationMinutes"`
+	GroupId         int64                `json:"groupId"`
+	Id              int64                `json:"id"`
+	InitiatorId     int64                `json:"initiatorId"`
+
+	// Invitations Only the current user's rounds and input.
+	Invitations []Invitation `json:"invitations"`
+	Status      OutingStatus `json:"status"`
+	Timezone    string       `json:"timezone"`
+}
+
+// OutingStatus defines model for OutingStatus.
+type OutingStatus string
 
 // Preference defines model for Preference.
 type Preference struct {
@@ -318,6 +517,16 @@ type RegisterRequest struct {
 	Email       string `json:"email"`
 	Password    string `json:"password"`
 }
+
+// RespondOutingRequest defines model for RespondOutingRequest.
+type RespondOutingRequest struct {
+	ExpectedVersion int64                      `json:"expectedVersion"`
+	Input           *MemberInput               `json:"input,omitempty"`
+	Status          RespondOutingRequestStatus `json:"status"`
+}
+
+// RespondOutingRequestStatus defines model for RespondOutingRequest.Status.
+type RespondOutingRequestStatus string
 
 // SoftPreferences defines model for SoftPreferences.
 type SoftPreferences struct {
@@ -358,6 +567,15 @@ type BrowserWriteHeader string
 // GroupId defines model for GroupId.
 type GroupId = int64
 
+// InvitationCursor defines model for InvitationCursor.
+type InvitationCursor = string
+
+// InvitationLimit defines model for InvitationLimit.
+type InvitationLimit = int
+
+// OutingId defines model for OutingId.
+type OutingId = int64
+
 // Error defines model for Error.
 type Error = ErrorResponse
 
@@ -366,6 +584,12 @@ type GroupResponse = Group
 
 // Healthy defines model for Healthy.
 type Healthy = Health
+
+// InvitationPageResponse defines model for InvitationPageResponse.
+type InvitationPageResponse = InvitationPage
+
+// OutingResponse defines model for OutingResponse.
+type OutingResponse = Outing
 
 // UserResponse defines model for UserResponse.
 type UserResponse = User
@@ -417,6 +641,35 @@ type GetGroupMembersParams struct {
 	Limit         *int   `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// CreateOutingParams defines parameters for CreateOuting.
+type CreateOutingParams struct {
+	XPlayPairRequest CreateOutingParamsXPlayPairRequest `json:"X-PlayPair-Request"`
+	IdempotencyKey   openapi_types.UUID                 `json:"Idempotency-Key"`
+}
+
+// CreateOutingParamsXPlayPairRequest defines parameters for CreateOuting.
+type CreateOutingParamsXPlayPairRequest string
+
+// GetMyInvitationsParams defines parameters for GetMyInvitations.
+type GetMyInvitationsParams struct {
+	Cursor *InvitationCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *InvitationLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetOutingInvitationsParams defines parameters for GetOutingInvitations.
+type GetOutingInvitationsParams struct {
+	Cursor *InvitationCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *InvitationLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// RespondOutingParams defines parameters for RespondOuting.
+type RespondOutingParams struct {
+	XPlayPairRequest RespondOutingParamsXPlayPairRequest `json:"X-PlayPair-Request"`
+}
+
+// RespondOutingParamsXPlayPairRequest defines parameters for RespondOuting.
+type RespondOutingParamsXPlayPairRequest string
+
 // PutPreferencesParams defines parameters for PutPreferences.
 type PutPreferencesParams struct {
 	XPlayPairRequest PutPreferencesParamsXPlayPairRequest `json:"X-PlayPair-Request"`
@@ -444,6 +697,12 @@ type CreateGroupJSONRequestBody = CreateGroupRequest
 
 // JoinGroupJSONRequestBody defines body for JoinGroup for application/json ContentType.
 type JoinGroupJSONRequestBody = JoinGroupRequest
+
+// CreateOutingJSONRequestBody defines body for CreateOuting for application/json ContentType.
+type CreateOutingJSONRequestBody = CreateOutingRequest
+
+// RespondOutingJSONRequestBody defines body for RespondOuting for application/json ContentType.
+type RespondOutingJSONRequestBody = RespondOutingRequest
 
 // PutPreferencesJSONRequestBody defines body for PutPreferences for application/json ContentType.
 type PutPreferencesJSONRequestBody = UpdatePreference
@@ -475,8 +734,23 @@ type ServerInterface interface {
 	// (GET /api/v1/groups/{groupId}/members)
 	GetGroupMembers(c *gin.Context, groupId GroupId, params GetGroupMembersParams)
 
+	// (POST /api/v1/groups/{groupId}/outings)
+	CreateOuting(c *gin.Context, groupId GroupId, params CreateOutingParams)
+
 	// (GET /api/v1/me)
 	Me(c *gin.Context)
+
+	// (GET /api/v1/me/invitations)
+	GetMyInvitations(c *gin.Context, params GetMyInvitationsParams)
+
+	// (GET /api/v1/outings/{outingId})
+	GetOuting(c *gin.Context, outingId OutingId)
+
+	// (GET /api/v1/outings/{outingId}/invitations)
+	GetOutingInvitations(c *gin.Context, outingId OutingId, params GetOutingInvitationsParams)
+
+	// (PUT /api/v1/outings/{outingId}/invitations/{phase})
+	RespondOuting(c *gin.Context, outingId OutingId, phase InvitationPhase, params RespondOutingParams)
 
 	// (GET /api/v1/preferences)
 	GetPreferences(c *gin.Context)
@@ -812,6 +1086,80 @@ func (siw *ServerInterfaceWrapper) GetGroupMembers(c *gin.Context) {
 	siw.Handler.GetGroupMembers(c, groupId, params)
 }
 
+// CreateOuting operation middleware
+func (siw *ServerInterfaceWrapper) CreateOuting(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId GroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", c.Param("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter groupId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateOutingParams
+
+	headers := c.Request.Header
+
+	// ------------- Required header parameter "X-PlayPair-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-PlayPair-Request")]; found {
+		var XPlayPairRequest CreateOutingParamsXPlayPairRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-PlayPair-Request, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-PlayPair-Request", valueList[0], &XPlayPairRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-PlayPair-Request: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XPlayPairRequest = XPlayPairRequest
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter X-PlayPair-Request is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey openapi_types.UUID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Idempotency-Key, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: "uuid"})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Idempotency-Key: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter Idempotency-Key is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateOuting(c, groupId, params)
+}
+
 // Me operation middleware
 func (siw *ServerInterfaceWrapper) Me(c *gin.Context) {
 
@@ -823,6 +1171,171 @@ func (siw *ServerInterfaceWrapper) Me(c *gin.Context) {
 	}
 
 	siw.Handler.Me(c)
+}
+
+// GetMyInvitations operation middleware
+func (siw *ServerInterfaceWrapper) GetMyInvitations(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMyInvitationsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", c.Request.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter cursor: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", c.Request.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetMyInvitations(c, params)
+}
+
+// GetOuting operation middleware
+func (siw *ServerInterfaceWrapper) GetOuting(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "outingId" -------------
+	var outingId OutingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "outingId", c.Param("outingId"), &outingId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter outingId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetOuting(c, outingId)
+}
+
+// GetOutingInvitations operation middleware
+func (siw *ServerInterfaceWrapper) GetOutingInvitations(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "outingId" -------------
+	var outingId OutingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "outingId", c.Param("outingId"), &outingId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter outingId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetOutingInvitationsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", c.Request.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter cursor: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", c.Request.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetOutingInvitations(c, outingId, params)
+}
+
+// RespondOuting operation middleware
+func (siw *ServerInterfaceWrapper) RespondOuting(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "outingId" -------------
+	var outingId OutingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "outingId", c.Param("outingId"), &outingId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter outingId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Path parameter "phase" -------------
+	var phase InvitationPhase
+
+	err = runtime.BindStyledParameterWithOptions("simple", "phase", c.Param("phase"), &phase, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter phase: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RespondOutingParams
+
+	headers := c.Request.Header
+
+	// ------------- Required header parameter "X-PlayPair-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-PlayPair-Request")]; found {
+		var XPlayPairRequest RespondOutingParamsXPlayPairRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-PlayPair-Request, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-PlayPair-Request", valueList[0], &XPlayPairRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-PlayPair-Request: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XPlayPairRequest = XPlayPairRequest
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter X-PlayPair-Request is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.RespondOuting(c, outingId, phase, params)
 }
 
 // GetPreferences operation middleware
@@ -990,6 +1503,11 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
+	router.POST(options.BaseURL+"/api/v1/groups/:groupId/outings", wrapper.CreateOuting)
+	router.GET(options.BaseURL+"/api/v1/outings/:outingId", wrapper.GetOuting)
+	router.GET(options.BaseURL+"/api/v1/outings/:outingId/invitations", wrapper.GetOutingInvitations)
+	router.GET(options.BaseURL+"/api/v1/me/invitations", wrapper.GetMyInvitations)
+	router.PUT(options.BaseURL+"/api/v1/outings/:outingId/invitations/:phase", wrapper.RespondOuting)
 	router.POST(options.BaseURL+"/api/v1/groups", wrapper.CreateGroup)
 	router.POST(options.BaseURL+"/api/v1/groups/join", wrapper.JoinGroup)
 	router.GET(options.BaseURL+"/api/v1/groups/:groupId", wrapper.GetGroup)
