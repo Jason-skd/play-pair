@@ -24,6 +24,55 @@ type GroupMember struct {
 	JoinedAt pgtype.Timestamptz
 }
 
+type Outing struct {
+	ID              int64
+	GroupID         int64
+	InitiatorID     int64
+	Timezone        string
+	DurationMinutes int32
+	CreationKey     pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+}
+
+type OutingArrangement struct {
+	OutingID int64
+	StartsAt pgtype.Timestamptz
+	EndsAt   pgtype.Timestamptz
+	Place    string
+	Activity string
+}
+
+type OutingAvailability struct {
+	OutingID    int64
+	MemberID    int64
+	Date        pgtype.Date
+	StartMinute int16
+	EndMinute   int16
+}
+
+type OutingDate struct {
+	OutingID int64
+	Date     pgtype.Date
+}
+
+type OutingInvitation struct {
+	OutingID   int64
+	MemberID   int64
+	Phase      string
+	Status     string
+	Version    int64
+	AcceptedAt pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type OutingMemberInput struct {
+	OutingID                 int64
+	MemberID                 int64
+	Phase                    string
+	MaxBudgetFen             int64
+	RequiresWheelchairAccess bool
+}
+
 type PasswordCredential struct {
 	PasswordHash string
 	UpdatedAt    pgtype.Timestamptz
