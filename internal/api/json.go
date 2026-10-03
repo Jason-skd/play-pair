@@ -47,6 +47,10 @@ func decodeReplacementLimit(c *gin.Context, dst any, required, nullable []string
 	if !decodeJSONLimit(c, &raw, limit) {
 		return false
 	}
+	return decodeReplacementJSON(c, raw, dst, required, nullable)
+}
+
+func decodeReplacementJSON(c *gin.Context, raw json.RawMessage, dst any, required, nullable []string) bool {
 	if !utf8.Valid(raw) {
 		writeError(c, 400, generated.InvalidInput, "Invalid UTF-8")
 		return false
@@ -83,6 +87,15 @@ func replacementValue(dec *json.Decoder, path string, required, nullable map[str
 		return nullable[path]
 	}
 	if delim, ok := token.(json.Delim); ok {
+		if delim == '[' && path != "" {
+			for dec.More() {
+				if !replacementValue(dec, path+"[]", required, nullable) {
+					return false
+				}
+			}
+			end, err := dec.Token()
+			return err == nil && end == json.Delim(']')
+		}
 		if delim != '{' {
 			return false
 		}
@@ -124,7 +137,7 @@ func replacementValue(dec *json.Decoder, path string, required, nullable map[str
 		return false
 	}
 	for key := range required {
-		if strings.HasPrefix(key, path+".") {
+		if strings.HasPrefix(key, path+".") || strings.HasPrefix(key, path+"[]") {
 			return false
 		}
 	}
