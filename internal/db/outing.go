@@ -29,9 +29,14 @@ func outingError(err error) error {
 	}
 	return dependency("outing operation", err)
 }
+
+// Read keeps the outing, access facts and member input in one read-only snapshot.
 func (db *DB) Read(ctx context.Context, fn func(outing.Store) error) error {
 	return db.outingTransaction(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, fn)
 }
+
+// Write commits the callback atomically, including deferred input-completeness checks.
+// The domain service acquires the outing row lock before checking mutable state.
 func (db *DB) Write(ctx context.Context, fn func(outing.Store) error) error {
 	return db.outingTransaction(ctx, pgx.TxOptions{}, fn)
 }
@@ -50,6 +55,8 @@ func (db *DB) outingTransaction(ctx context.Context, opts pgx.TxOptions, fn func
 func (s *outingStore) GroupMember(ctx context.Context, gid int64, actor users.ID) (bool, error) {
 	return s.q.OutingGroupMember(ctx, generated.OutingGroupMemberParams{GroupID: gid, MemberID: int64(actor)})
 }
+
+// outingDate converts dates already validated by the domain service.
 func outingDate(d outing.Date) pgtype.Date {
 	t, _ := time.Parse(time.DateOnly, string(d))
 	return pgtype.Date{Time: t, Valid: true}
@@ -129,6 +136,8 @@ func (s *outingStore) Member(ctx context.Context, id outing.ID, actor users.ID) 
 	}
 	return m, nil
 }
+
+// SavePlan replaces candidate dates without deleting stale member availability.
 func (s *outingStore) SavePlan(ctx context.Context, id outing.ID, p outing.Plan) error {
 	if e := s.q.UpdateOutingPlan(ctx, generated.UpdateOutingPlanParams{OutingID: int64(id), DurationMinutes: int32(p.DurationMinutes)}); e != nil {
 		return e
@@ -143,6 +152,9 @@ func (s *outingStore) SavePlan(ctx context.Context, id outing.ID, p outing.Plan)
 	}
 	return nil
 }
+
+// SaveDecision replaces choice and input together. Deferred completeness checks
+// run at commit, allowing the old availability to be removed before replacement.
 func (s *outingStore) SaveDecision(ctx context.Context, id outing.ID, actor users.ID, choice outing.Choice, input *outing.MemberInput) error {
 	p := generated.SaveDecisionParams{OutingID: int64(id), MemberID: int64(actor), Choice: string(choice)}
 	if input != nil {
@@ -178,6 +190,8 @@ func (s *outingStore) SaveArrangement(ctx context.Context, id outing.ID, a outin
 		return e
 	}
 	if reset {
+		// Clear choices rather than deleting rows: respondents retain access even
+		// if they have left the group and never answered the first round.
 		return s.q.ResetConfirmations(ctx, int64(id))
 	}
 	return nil

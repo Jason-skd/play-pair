@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// ParseDate accepts canonical calendar dates in years 0001 through 9999.
 func ParseDate(s string) (Date, error) {
 	t, e := time.Parse(time.DateOnly, s)
 	if e != nil || t.Year() < 1 || t.Format(time.DateOnly) != s {
@@ -13,6 +14,9 @@ func ParseDate(s string) (Date, error) {
 	}
 	return Date(s), nil
 }
+
+// Location resolves a named timezone without depending on the server's local zone
+// or accepting a filesystem path as user input.
 func Location(name string) (*time.Location, error) {
 	if name == "" || name == "Local" || strings.HasPrefix(name, "/") {
 		return nil, ErrInvalidInput

@@ -262,6 +262,7 @@ func (s *server) ListOutings(c *gin.Context, params generated.ListOutingsParams)
 	c.JSON(200, result)
 }
 
+// responseCursor encodes both ordering fields because each member can have two rows.
 type responseCursor struct {
 	MemberID int64        `json:"memberId"`
 	Phase    outing.Phase `json:"phase"`
@@ -322,6 +323,9 @@ func outingObject(o outing.Outing, now time.Time) generated.Outing {
 	}
 	return v
 }
+
+// outingMember distinguishes an unanswered current round from a past round that
+// the member never joined, while retaining first-round input during confirmation.
 func outingMember(d outing.Detail) generated.OutingMember {
 	m := d.Member
 	v := generated.OutingMember{MemberId: int64(m.MemberID), Decision: "pending", Confirmation: "not_started", Warnings: []generated.OutingWarning{}}
