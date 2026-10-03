@@ -86,6 +86,24 @@ func TestLocalTimeBoundaries(t *testing.T) {
 	}
 }
 
+func TestPlanValuePolicy(t *testing.T) {
+	for _, duration := range []int{0, 15, 31, 1470} {
+		if _, err := normalizePlan(Plan{Dates: []Date{"2026-10-10"}, DurationMinutes: duration}); !errors.Is(err, ErrInvalidInput) {
+			t.Fatal(duration, err)
+		}
+	}
+	for _, duration := range []int{30, 1440} {
+		if _, err := normalizePlan(Plan{Dates: []Date{"2026-10-10"}, DurationMinutes: duration}); err != nil {
+			t.Fatal(duration, err)
+		}
+	}
+	for _, date := range []Date{"0000-01-01", "10000-01-01", "2026-02-30"} {
+		if _, err := normalizePlan(Plan{Dates: []Date{date}, DurationMinutes: 60}); !errors.Is(err, ErrInvalidInput) {
+			t.Fatal(date, err)
+		}
+	}
+}
+
 func TestPlanConflictsAreComputedWithoutChangingInput(t *testing.T) {
 	input := MemberInput{Availability: []Availability{{"2026-10-10", 600, 660}, {"2026-10-11", 600, 720}}}
 	plan := Plan{Dates: []Date{"2026-10-10"}, DurationMinutes: 90}

@@ -261,8 +261,6 @@ func TestOutingDatabaseCompletenessAndOwnership(t *testing.T) {
 	}
 	_, err = db.pool.Exec(ctx, "DELETE FROM outing_availability WHERE outing_id=$1 AND member_id=$2", o.ID, ids[2])
 	requirePGConstraint(t, err, "23514", "outing_input_complete")
-	_, err = db.pool.Exec(ctx, "INSERT INTO outing_availability SELECT $1,$2,DATE '2026-10-11'+i,0,30 FROM generate_series(1,256) i", o.ID, ids[2])
-	requirePGConstraint(t, err, "23514", "outing_input_complete")
 	// Moving the last interval must validate its old owner, too.
 	if err := s.Respond(ctx, ids[0], o.ID, outing.Decision, outing.Accept, outingInput()); err != nil {
 		t.Fatal(err)
@@ -303,6 +301,30 @@ func TestOutingDatabaseCompletenessAndOwnership(t *testing.T) {
 		var n int
 		if err := db.pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&n); err != nil || n != 0 {
 			t.Fatal(table, n, err)
+		}
+	}
+}
+
+func TestOutingDatabaseLeavesValuePolicyToGo(t *testing.T) {
+	db, ctx, ids, s, _, o := outingFixture(t)
+	if err := s.Respond(ctx, ids[2], o.ID, outing.Decision, outing.Accept, outingInput()); err != nil {
+		t.Fatal(err)
+	}
+	// Direct writes bypass Go's value policy but still satisfy input completeness.
+	for _, sql := range []string{
+		"UPDATE outings SET duration_minutes=15 WHERE id=$1",
+		"INSERT INTO outing_dates VALUES($1, DATE '10000-01-01')",
+		"UPDATE outing_decisions SET max_budget_fen=-1 WHERE outing_id=$1 AND member_id=$2",
+		"UPDATE outing_availability SET date=DATE '10000-01-01',start_minute=601,end_minute=-1 WHERE outing_id=$1 AND member_id=$2",
+		"INSERT INTO outing_availability SELECT $1,$2,DATE '2026-10-11'+i,0,30 FROM generate_series(1,256) i",
+		"INSERT INTO outing_arrangements VALUES($1,'2026-10-11','2026-10-10','','')",
+	} {
+		args := []any{o.ID}
+		if strings.Contains(sql, "$2") {
+			args = append(args, ids[2])
+		}
+		if _, err := db.pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatal(sql, err)
 		}
 	}
 }

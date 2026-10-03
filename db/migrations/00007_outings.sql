@@ -4,12 +4,12 @@ CREATE TABLE outings (
     group_id BIGINT NOT NULL REFERENCES groups(id),
     initiator_id BIGINT NOT NULL REFERENCES users(id),
     timezone TEXT NOT NULL,
-    duration_minutes INTEGER NOT NULL CHECK (duration_minutes BETWEEN 30 AND 1440 AND duration_minutes % 30 = 0),
+    duration_minutes INTEGER NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
 CREATE TABLE outing_dates (
     outing_id BIGINT NOT NULL REFERENCES outings(id) ON DELETE CASCADE,
-    date DATE NOT NULL CHECK (date BETWEEN DATE '0001-01-01' AND DATE '9999-12-31'),
+    date DATE NOT NULL,
     PRIMARY KEY (outing_id, date)
 );
 CREATE TABLE outing_decisions (
@@ -19,26 +19,24 @@ CREATE TABLE outing_decisions (
     max_budget_fen BIGINT,
     requires_wheelchair_access BOOLEAN,
     PRIMARY KEY (outing_id, member_id),
-    CHECK ((choice = 'accept' AND max_budget_fen IS NOT NULL AND max_budget_fen >= 0 AND requires_wheelchair_access IS NOT NULL)
+    CHECK ((choice = 'accept' AND max_budget_fen IS NOT NULL AND requires_wheelchair_access IS NOT NULL)
         OR (choice = 'deny' AND max_budget_fen IS NULL AND requires_wheelchair_access IS NULL))
 );
 CREATE TABLE outing_availability (
     outing_id BIGINT NOT NULL,
     member_id BIGINT NOT NULL,
-    date DATE NOT NULL CHECK (date BETWEEN DATE '0001-01-01' AND DATE '9999-12-31'),
+    date DATE NOT NULL,
     start_minute SMALLINT NOT NULL,
     end_minute SMALLINT NOT NULL,
     PRIMARY KEY (outing_id, member_id, date, start_minute),
-    FOREIGN KEY (outing_id, member_id) REFERENCES outing_decisions(outing_id, member_id) ON DELETE CASCADE,
-    CHECK (start_minute >= 0 AND start_minute < end_minute AND end_minute <= 1440 AND start_minute % 30 = 0 AND end_minute % 30 = 0)
+    FOREIGN KEY (outing_id, member_id) REFERENCES outing_decisions(outing_id, member_id) ON DELETE CASCADE
 );
 CREATE TABLE outing_arrangements (
     outing_id BIGINT PRIMARY KEY REFERENCES outings(id) ON DELETE CASCADE,
     starts_at TIMESTAMPTZ NOT NULL,
     ends_at TIMESTAMPTZ NOT NULL,
-    place TEXT NOT NULL CHECK (char_length(btrim(place)) BETWEEN 1 AND 500),
-    activity TEXT NOT NULL CHECK (char_length(btrim(activity)) BETWEEN 1 AND 500),
-    CHECK (isfinite(starts_at) AND isfinite(ends_at) AND starts_at < ends_at)
+    place TEXT NOT NULL,
+    activity TEXT NOT NULL
 );
 CREATE TABLE outing_confirmations (
     outing_id BIGINT NOT NULL REFERENCES outing_arrangements(outing_id) ON DELETE CASCADE,
@@ -66,7 +64,7 @@ BEGIN
         SELECT choice INTO response FROM outing_decisions WHERE outing_id = target AND member_id = member FOR UPDATE;
         IF NOT FOUND THEN CONTINUE; END IF;
         SELECT count(*) INTO n FROM outing_availability WHERE outing_id = target AND member_id = member;
-        IF (response = 'accept' AND (n < 1 OR n > 256)) OR (response = 'deny' AND n <> 0) THEN
+        IF (response = 'accept' AND n = 0) OR (response = 'deny' AND n <> 0) THEN
             RAISE EXCEPTION 'incomplete decision input' USING ERRCODE = '23514', CONSTRAINT = 'outing_input_complete';
         END IF;
     END LOOP;
