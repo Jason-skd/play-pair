@@ -87,11 +87,11 @@ type Outing struct {
 }
 
 // StatusAt derives the current stage from arrangement existence and start time.
-func (o Outing) StatusAt(now time.Time) string {
-	if o.Arrangement == nil {
+func (current Outing) StatusAt(now time.Time) string {
+	if current.Arrangement == nil {
 		return string(Decision)
 	}
-	if !now.Before(o.Arrangement.StartsAt) {
+	if !now.Before(current.Arrangement.StartsAt) {
 		return "archived"
 	}
 	return string(Confirmation)
@@ -102,8 +102,8 @@ func (o Outing) StatusAt(now time.Time) string {
 type Membership struct{ InGroup, HasDecision, HasConfirmation bool }
 
 // Visible retains organizer and respondent access after leaving the source group.
-func (m Membership) Visible(o Outing, actor users.ID) bool {
-	return actor == o.InitiatorID || m.InGroup || m.HasDecision || (o.Arrangement != nil && m.HasConfirmation)
+func (m Membership) Visible(current Outing, actor users.ID) bool {
+	return actor == current.InitiatorID || m.InGroup || m.HasDecision || (current.Arrangement != nil && m.HasConfirmation)
 }
 
 // Member retains both response rounds and first-round input after confirmation opens.
@@ -183,7 +183,7 @@ type Store interface {
 	SavePlan(context.Context, ID, Plan) error
 	SaveDecision(context.Context, ID, users.ID, Choice, *MemberInput) error
 	SaveConfirmation(context.Context, ID, users.ID, Choice) error
-	SaveArrangement(context.Context, ID, Arrangement, bool, bool) error
+	SaveArrangement(ctx context.Context, id ID, arrangement Arrangement, updateExisting, resetResponses bool) error
 	ListOutings(context.Context, users.ID, ListFilter) (OutingPage, error)
 	ListResponses(context.Context, Outing, ResponseFilter) (ResponsePage, error)
 }
@@ -206,96 +206,104 @@ func New(repo Repository, now func() time.Time) *Service { return &Service{repo:
 // Now returns the service clock used to project time-dependent outing status.
 func (s *Service) Now() time.Time { return s.now() }
 
-func normalizePlan(p Plan) (Plan, error) {
-	if len(p.Dates) < 1 || len(p.Dates) > 31 || p.DurationMinutes < 30 || p.DurationMinutes > 1440 || p.DurationMinutes%30 != 0 {
-		return p, ErrInvalidInput
+func normalizePlan(plan Plan) (Plan, error) {
+	if len(plan.Dates) < 1 || len(plan.Dates) > 31 {
+		return plan, ErrInvalidInput
 	}
-	p.Dates = slices.Clone(p.Dates)
-	for _, d := range p.Dates {
-		if _, e := ParseDate(string(d)); e != nil {
-			return p, ErrInvalidInput
+	if plan.DurationMinutes < 30 || plan.DurationMinutes > 1440 || plan.DurationMinutes%30 != 0 {
+		return plan, ErrInvalidInput
+	}
+	plan.Dates = slices.Clone(plan.Dates)
+	for _, date := range plan.Dates {
+		if _, err := ParseDate(string(date)); err != nil {
+			return plan, ErrInvalidInput
 		}
 	}
-	slices.Sort(p.Dates)
-	p.Dates = slices.Compact(p.Dates)
-	return p, nil
+	slices.Sort(plan.Dates)
+	plan.Dates = slices.Compact(plan.Dates)
+	return plan, nil
 }
 
 // Create publishes a plan for a group member without creating invitation rows.
-func (s *Service) Create(ctx context.Context, actor users.ID, gid int64, timezone string, p Plan) (o Outing, err error) {
-	if actor <= 0 || gid <= 0 {
-		return o, ErrInvalidInput
+func (s *Service) Create(ctx context.Context, actor users.ID, groupID int64, timezone string, plan Plan) (Outing, error) {
+	if actor <= 0 || groupID <= 0 {
+		return Outing{}, ErrInvalidInput
 	}
-	p, err = normalizePlan(p)
+	plan, err := normalizePlan(plan)
 	if err != nil {
-		return
+		return Outing{}, err
 	}
-	if _, err = Location(timezone); err != nil {
-		return
+	if _, err := Location(timezone); err != nil {
+		return Outing{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	err = s.repo.Write(ctx, func(q Store) error {
-		ok, e := q.GroupMember(ctx, gid, actor)
-		if e != nil {
-			return e
+	var current Outing
+	err = s.repo.Write(ctx, func(store Store) error {
+		inGroup, err := store.GroupMember(ctx, groupID, actor)
+		if err != nil {
+			return err
 		}
-		if !ok {
+		if !inGroup {
 			return ErrForbidden
 		}
-		o, e = q.InsertOuting(ctx, actor, gid, timezone, p)
-		return e
+		current, err = store.InsertOuting(ctx, actor, groupID, timezone, plan)
+		return err
 	})
-	return
+	return current, err
 }
-func accessible(ctx context.Context, q Store, id ID, actor users.ID) (Outing, error) {
-	o, e := q.LoadOuting(ctx, id)
-	if e != nil {
-		return o, e
+
+func accessible(ctx context.Context, store Store, id ID, actor users.ID) (Outing, error) {
+	current, err := store.LoadOuting(ctx, id)
+	if err != nil {
+		return current, err
 	}
-	m, e := q.Membership(ctx, o, actor)
-	if e != nil {
-		return o, e
+	membership, err := store.Membership(ctx, current, actor)
+	if err != nil {
+		return current, err
 	}
-	if !m.Visible(o, actor) {
-		return o, ErrForbidden
+	if !membership.Visible(current, actor) {
+		return current, ErrForbidden
 	}
-	return o, nil
+	return current, nil
 }
 
 // Get returns member input only to that member or the organizer.
 // First-round input remains readable in round two, but warnings are only computed
 // while members can still amend that input during the decision round.
-func (s *Service) Get(ctx context.Context, actor users.ID, id ID, member users.ID) (d Detail, err error) {
-	if actor <= 0 || id <= 0 || member <= 0 {
-		return d, ErrInvalidInput
+func (s *Service) Get(ctx context.Context, actor users.ID, id ID, memberID users.ID) (Detail, error) {
+	if actor <= 0 || id <= 0 || memberID <= 0 {
+		return Detail{}, ErrInvalidInput
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	err = s.repo.Read(ctx, func(q Store) error {
-		o, e := accessible(ctx, q, id, actor)
-		if e != nil {
-			return e
+	var detail Detail
+	err := s.repo.Read(ctx, func(store Store) error {
+		current, err := accessible(ctx, store, id, actor)
+		if err != nil {
+			return err
 		}
-		if member != actor && actor != o.InitiatorID {
+		if memberID != actor && actor != current.InitiatorID {
 			return ErrForbidden
 		}
-		m, e := q.Membership(ctx, o, member)
-		if e != nil {
-			return e
+		membership, err := store.Membership(ctx, current, memberID)
+		if err != nil {
+			return err
 		}
-		if !m.Visible(o, member) {
+		if !membership.Visible(current, memberID) {
 			return ErrForbidden
 		}
-		d.Outing = o
-		d.Member, e = q.Member(ctx, id, member)
-		d.Warnings = []Warning{}
-		if e == nil && o.Arrangement == nil && d.Member.Input != nil {
-			_, d.Warnings = ValidAvailability(*d.Member.Input, o.Plan)
+		member, err := store.Member(ctx, id, memberID)
+		if err != nil {
+			return err
 		}
-		return e
+		detail = Detail{Outing: current, Member: member, Warnings: []Warning{}}
+		if current.Arrangement == nil && member.Input != nil {
+			_, detail.Warnings = ValidAvailability(*detail.Member.Input, current.Plan)
+		}
+		return nil
 	})
-	return
+	return detail, err
 }
 
 // command locks before reading permissions and stage so concurrent outing commands
@@ -306,34 +314,34 @@ func (s *Service) command(ctx context.Context, actor users.ID, id ID, fn func(co
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return s.repo.Write(ctx, func(q Store) error {
-		if e := q.LockOuting(ctx, id); e != nil {
-			return e
+	return s.repo.Write(ctx, func(store Store) error {
+		if err := store.LockOuting(ctx, id); err != nil {
+			return err
 		}
-		o, e := accessible(ctx, q, id, actor)
-		if e != nil {
-			return e
+		current, err := accessible(ctx, store, id, actor)
+		if err != nil {
+			return err
 		}
 		now := s.now()
-		if o.StatusAt(now) == "archived" {
+		if current.StatusAt(now) == "archived" {
 			return ErrArchived
 		}
-		return fn(ctx, q, o, now)
+		return fn(ctx, store, current, now)
 	})
 }
 
 // Update replaces dates and duration before the current arrangement starts.
 // Existing input is preserved even when it conflicts with the replacement plan.
-func (s *Service) Update(ctx context.Context, actor users.ID, id ID, p Plan) error {
-	p, e := normalizePlan(p)
-	if e != nil {
-		return e
+func (s *Service) Update(ctx context.Context, actor users.ID, id ID, plan Plan) error {
+	plan, err := normalizePlan(plan)
+	if err != nil {
+		return err
 	}
-	return s.command(ctx, actor, id, func(ctx context.Context, q Store, o Outing, _ time.Time) error {
-		if actor != o.InitiatorID {
+	return s.command(ctx, actor, id, func(ctx context.Context, store Store, current Outing, _ time.Time) error {
+		if actor != current.InitiatorID {
 			return ErrForbidden
 		}
-		return q.SavePlan(ctx, id, p)
+		return store.SavePlan(ctx, id, plan)
 	})
 }
 
@@ -343,80 +351,100 @@ func (s *Service) Respond(ctx context.Context, actor users.ID, id ID, phase Phas
 	if (phase != Decision && phase != Confirmation) || (choice != Accept && choice != Deny) {
 		return ErrInvalidInput
 	}
-	if (phase == Decision && choice == Accept) != (input != nil) {
+	requiresInput := phase == Decision && choice == Accept
+	if requiresInput != (input != nil) {
 		return ErrInvalidInput
 	}
-	return s.command(ctx, actor, id, func(ctx context.Context, q Store, o Outing, _ time.Time) error {
-		if (o.Arrangement == nil) != (phase == Decision) {
+	return s.command(ctx, actor, id, func(ctx context.Context, store Store, current Outing, _ time.Time) error {
+		decisionOpen := current.Arrangement == nil
+		if decisionOpen != (phase == Decision) {
 			return ErrPhase
 		}
 		if phase == Confirmation {
-			return q.SaveConfirmation(ctx, id, actor, choice)
+			return store.SaveConfirmation(ctx, id, actor, choice)
 		}
 		if input != nil {
-			v, e := Normalize(*input, o.Dates, o.Timezone)
-			if e != nil {
-				return e
+			normalized, err := Normalize(*input, current.Dates, current.Timezone)
+			if err != nil {
+				return err
 			}
-			input = &v
+			input = &normalized
 		}
-		return q.SaveDecision(ctx, id, actor, choice, input)
+		return store.SaveDecision(ctx, id, actor, choice, input)
 	})
 }
 
 // Arrange creates or replaces the organizer's proposal before it starts.
-// update selects replacement; reset clears second-round choices while retaining
+// updateExisting selects replacement; resetResponses clears second-round choices while retaining
 // their rows and access. Keeping choices makes the organizer responsible for consent.
-func (s *Service) Arrange(ctx context.Context, actor users.ID, id ID, a Arrangement, update, reset bool) error {
-	a.Place = strings.TrimSpace(a.Place)
-	a.Activity = strings.TrimSpace(a.Activity)
-	for _, v := range []string{a.Place, a.Activity} {
-		if !utf8.ValidString(v) || strings.ContainsRune(v, 0) || utf8.RuneCountInString(v) < 1 || utf8.RuneCountInString(v) > 500 {
+func (s *Service) Arrange(ctx context.Context, actor users.ID, id ID, arrangement Arrangement, updateExisting, resetResponses bool) error {
+	arrangement.Place = strings.TrimSpace(arrangement.Place)
+	arrangement.Activity = strings.TrimSpace(arrangement.Activity)
+	for _, text := range []string{arrangement.Place, arrangement.Activity} {
+		if !utf8.ValidString(text) || strings.ContainsRune(text, 0) {
+			return ErrInvalidInput
+		}
+		if length := utf8.RuneCountInString(text); length < 1 || length > 500 {
 			return ErrInvalidInput
 		}
 	}
-	if a.StartsAt.Year() < 1 || a.EndsAt.Year() > 9999 || !a.StartsAt.Before(a.EndsAt) {
+	if arrangement.StartsAt.Year() < 1 || arrangement.EndsAt.Year() > 9999 || !arrangement.StartsAt.Before(arrangement.EndsAt) {
 		return ErrInvalidInput
 	}
-	return s.command(ctx, actor, id, func(ctx context.Context, q Store, o Outing, now time.Time) error {
-		if actor != o.InitiatorID {
+	return s.command(ctx, actor, id, func(ctx context.Context, store Store, current Outing, now time.Time) error {
+		if actor != current.InitiatorID {
 			return ErrForbidden
 		}
-		if update != (o.Arrangement != nil) {
+		if updateExisting != (current.Arrangement != nil) {
 			return ErrPhase
 		}
-		if !a.StartsAt.After(now) {
+		if !arrangement.StartsAt.After(now) {
 			return ErrInvalidInput
 		}
-		return q.SaveArrangement(ctx, id, a, update, reset)
+		return store.SaveArrangement(ctx, id, arrangement, updateExisting, resetResponses)
 	})
 }
 
 // List returns visible outings, including retained access after leaving a group.
-func (s *Service) List(ctx context.Context, actor users.ID, f ListFilter) (p OutingPage, err error) {
-	if actor <= 0 || f.GroupID < 0 || f.After < 0 || f.Limit < 1 || f.Limit > 100 {
-		return p, ErrInvalidInput
+func (s *Service) List(ctx context.Context, actor users.ID, filter ListFilter) (OutingPage, error) {
+	if actor <= 0 || filter.GroupID < 0 || filter.After < 0 || filter.Limit < 1 || filter.Limit > 100 {
+		return OutingPage{}, ErrInvalidInput
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	err = s.repo.Read(ctx, func(q Store) error { var e error; p, e = q.ListOutings(ctx, actor, f); return e })
-	return
+	var page OutingPage
+	err := s.repo.Read(ctx, func(store Store) error {
+		var err error
+		page, err = store.ListOutings(ctx, actor, filter)
+		return err
+	})
+	return page, err
 }
 
 // Responses returns filtered summaries across both rounds without private input.
-func (s *Service) Responses(ctx context.Context, actor users.ID, id ID, f ResponseFilter) (p ResponsePage, err error) {
-	if actor <= 0 || id <= 0 || f.Limit < 1 || f.Limit > 100 || f.After.MemberID < 0 || (f.Phase != "" && f.Phase != Decision && f.Phase != Confirmation) || (f.Status != "" && f.Status != Accept && f.Status != Deny && f.Status != Pending) || (f.After.Phase != "" && f.After.Phase != Decision && f.After.Phase != Confirmation) {
-		return p, ErrInvalidInput
+func (s *Service) Responses(ctx context.Context, actor users.ID, id ID, filter ResponseFilter) (ResponsePage, error) {
+	if actor <= 0 || id <= 0 || filter.Limit < 1 || filter.Limit > 100 || filter.After.MemberID < 0 {
+		return ResponsePage{}, ErrInvalidInput
+	}
+	if filter.Phase != "" && filter.Phase != Decision && filter.Phase != Confirmation {
+		return ResponsePage{}, ErrInvalidInput
+	}
+	if filter.Status != "" && filter.Status != Accept && filter.Status != Deny && filter.Status != Pending {
+		return ResponsePage{}, ErrInvalidInput
+	}
+	if filter.After.Phase != "" && filter.After.Phase != Decision && filter.After.Phase != Confirmation {
+		return ResponsePage{}, ErrInvalidInput
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	err = s.repo.Read(ctx, func(q Store) error {
-		o, e := accessible(ctx, q, id, actor)
-		if e != nil {
-			return e
+	var page ResponsePage
+	err := s.repo.Read(ctx, func(store Store) error {
+		current, err := accessible(ctx, store, id, actor)
+		if err != nil {
+			return err
 		}
-		p, e = q.ListResponses(ctx, o, f)
-		return e
+		page, err = store.ListResponses(ctx, current, filter)
+		return err
 	})
-	return
+	return page, err
 }

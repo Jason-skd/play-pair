@@ -7,12 +7,12 @@ import (
 )
 
 // ParseDate accepts canonical calendar dates in years 0001 through 9999.
-func ParseDate(s string) (Date, error) {
-	t, e := time.Parse(time.DateOnly, s)
-	if e != nil || t.Year() < 1 || t.Format(time.DateOnly) != s {
+func ParseDate(value string) (Date, error) {
+	parsed, err := time.Parse(time.DateOnly, value)
+	if err != nil || parsed.Year() < 1 || parsed.Format(time.DateOnly) != value {
 		return "", ErrInvalidAvailability
 	}
-	return Date(s), nil
+	return Date(value), nil
 }
 
 // Location resolves a named timezone without depending on the server's local zone
@@ -21,23 +21,23 @@ func Location(name string) (*time.Location, error) {
 	if name == "" || name == "Local" || strings.HasPrefix(name, "/") {
 		return nil, ErrInvalidInput
 	}
-	l, err := time.LoadLocation(name)
+	location, err := time.LoadLocation(name)
 	if err != nil {
 		return nil, ErrInvalidInput
 	}
-	return l, nil
+	return location, nil
 }
 
 // ParseMinute accepts half-hour boundaries; only an end may be 24:00.
-func ParseMinute(s string, end bool) (int, error) {
-	if s == "24:00" && end {
+func ParseMinute(value string, end bool) (int, error) {
+	if value == "24:00" && end {
 		return 1440, nil
 	}
-	t, err := time.Parse("15:04", s)
-	if err != nil || t.Format("15:04") != s || t.Minute()%30 != 0 {
+	parsed, err := time.Parse("15:04", value)
+	if err != nil || parsed.Format("15:04") != value || parsed.Minute()%30 != 0 {
 		return 0, ErrInvalidAvailability
 	}
-	return t.Hour()*60 + t.Minute(), nil
+	return parsed.Hour()*60 + parsed.Minute(), nil
 }
 
 // Normalize validates every half-hour boundary, including DST gaps and folds,
@@ -54,16 +54,22 @@ func Normalize(input MemberInput, dates []Date, timezone string) (MemberInput, e
 		return MemberInput{}, err
 	}
 	values := slices.Clone(input.Availability)
-	for _, v := range values {
-		if !slices.Contains(dates, v.Date) || v.StartMinute < 0 || v.EndMinute > 1440 || v.StartMinute >= v.EndMinute || v.StartMinute%30 != 0 || v.EndMinute%30 != 0 {
+	for _, interval := range values {
+		if !slices.Contains(dates, interval.Date) {
 			return MemberInput{}, ErrInvalidAvailability
 		}
-		d, err := time.Parse(time.DateOnly, string(v.Date))
+		if interval.StartMinute < 0 || interval.EndMinute > 1440 || interval.StartMinute >= interval.EndMinute {
+			return MemberInput{}, ErrInvalidAvailability
+		}
+		if interval.StartMinute%30 != 0 || interval.EndMinute%30 != 0 {
+			return MemberInput{}, ErrInvalidAvailability
+		}
+		date, err := time.Parse(time.DateOnly, string(interval.Date))
 		if err != nil {
 			return MemberInput{}, ErrInvalidAvailability
 		}
-		for m := v.StartMinute; m <= v.EndMinute; m += 30 {
-			if !uniqueLocal(d.Add(time.Duration(m)*time.Minute), loc) {
+		for minute := interval.StartMinute; minute <= interval.EndMinute; minute += 30 {
+			if !uniqueLocal(date.Add(time.Duration(minute)*time.Minute), loc) {
 				return MemberInput{}, ErrInvalidAvailability
 			}
 		}
@@ -78,15 +84,15 @@ func Normalize(input MemberInput, dates []Date, timezone string) (MemberInput, e
 		return a.StartMinute - b.StartMinute
 	})
 	merged := make([]Availability, 0, len(values))
-	for _, v := range values {
+	for _, interval := range values {
 		if len(merged) > 0 {
-			p := &merged[len(merged)-1]
-			if p.Date == v.Date && v.StartMinute <= p.EndMinute {
-				p.EndMinute = max(p.EndMinute, v.EndMinute)
+			previous := &merged[len(merged)-1]
+			if previous.Date == interval.Date && interval.StartMinute <= previous.EndMinute {
+				previous.EndMinute = max(previous.EndMinute, interval.EndMinute)
 				continue
 			}
 		}
-		merged = append(merged, v)
+		merged = append(merged, interval)
 	}
 	input.Availability = merged
 	return input, nil
@@ -97,20 +103,22 @@ func Normalize(input MemberInput, dates []Date, timezone string) (MemberInput, e
 func uniqueLocal(wall time.Time, loc *time.Location) bool {
 	offsets := map[int]bool{}
 	start, end := wall.Add(-72*time.Hour), wall.Add(72*time.Hour)
-	for t := start; t.Before(end); {
-		local := t.In(loc)
+	for candidate := start; candidate.Before(end); {
+		local := candidate.In(loc)
 		_, offset := local.Zone()
 		offsets[offset] = true
 		_, next := local.ZoneBounds()
 		if next.IsZero() || !next.Before(end) {
 			break
 		}
-		t = next
+		candidate = next
 	}
 	matches := 0
 	for offset := range offsets {
-		t := wall.Add(-time.Duration(offset) * time.Second).In(loc)
-		if t.Year() == wall.Year() && t.Month() == wall.Month() && t.Day() == wall.Day() && t.Hour() == wall.Hour() && t.Minute() == wall.Minute() && t.Second() == 0 {
+		candidate := wall.Add(-time.Duration(offset) * time.Second).In(loc)
+		sameDate := candidate.Year() == wall.Year() && candidate.Month() == wall.Month() && candidate.Day() == wall.Day()
+		sameTime := candidate.Hour() == wall.Hour() && candidate.Minute() == wall.Minute() && candidate.Second() == 0
+		if sameDate && sameTime {
 			matches++
 		}
 	}
@@ -123,17 +131,17 @@ func uniqueLocal(wall time.Time, loc *time.Location) bool {
 func ValidAvailability(input MemberInput, plan Plan) ([]Availability, []Warning) {
 	valid := []Availability{}
 	warnings := []Warning{}
-	for i, a := range input.Availability {
-		if !slices.Contains(plan.Dates, a.Date) {
-			n := i
-			warnings = append(warnings, Warning{Code: "date_outside_plan", AvailabilityIndex: &n})
+	for i, interval := range input.Availability {
+		if !slices.Contains(plan.Dates, interval.Date) {
+			index := i
+			warnings = append(warnings, Warning{Code: "date_outside_plan", AvailabilityIndex: &index})
 			continue
 		}
-		valid = append(valid, a)
+		valid = append(valid, interval)
 	}
 	fits := false
-	for _, a := range valid {
-		if a.EndMinute-a.StartMinute >= plan.DurationMinutes {
+	for _, interval := range valid {
+		if interval.EndMinute-interval.StartMinute >= plan.DurationMinutes {
 			fits = true
 			break
 		}
