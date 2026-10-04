@@ -44,6 +44,7 @@ make generate
 - [`internal/profile/`](internal/profile/)：个人展示资料。
 - [`internal/preference/`](internal/preference/)：偏好及其版本。
 - [`internal/group/`](internal/group/)：小组和成员关系。
+- [`internal/outing/`](internal/outing/)：outing 访问权限、两轮响应、可修改的日期与安排及动态冲突警告。
 - [`internal/config/`](internal/config/)：启动配置解析和校验。
 - [`internal/db/`](internal/db/)：数据库连接、查询 adapter 和生成代码。
 - [`api/`](api/)：HTTP 契约及其生成配置。
@@ -78,3 +79,15 @@ make generate
 - 数据库 schema：[`db/migrations/`](db/migrations/)。
 - SQL 查询：[`db/queries/`](db/queries/)。
 - 生成代码：[`internal/api/generated/`](internal/api/generated/) 和 [`internal/db/generated/`](internal/db/generated/)，不得手工修改。
+
+## Outing 业务边界
+
+组员可创建 outing；未响应时不存记录，读取时推导 pending。第一轮 Accept 显式填写预算、无障碍要求及空闲时间，Deny 清除这些输入。已有响应者离组后仍可访问，组织者离组后仍保留管理权。
+
+组织者可修改日期和时长，时区固定。旧填写允许与新日期冲突：第一轮读取详情时返回动态 warnings，不持久化、不自动删除。成员可修改或忽略；后续时间聚合必须排除超出候选日期的区间，并按当前时长判断是否可用。第二轮继续展示第一轮填写，但不再返回该警告。
+
+组织者手工填写 arrangement 后进入第二轮，成员只需 Accept/Deny；修改 arrangement 必须显式选择 `resetResponses`。打回通过清空第二轮选择保留记录，保证已离组成员仍能查看和重新响应。活动开始后只读。列表统一使用 `GET /api/v1/outings`（可按 `groupId` 过滤）；响应摘要统一查询两轮，可按阶段和状态过滤，私人填写仅本人和组织者可读。完整协议见 OpenAPI。
+
+日期、第一轮响应及其空闲时间属于 outing；第二轮响应属于 arrangement。数据库删除 outing 时级联全部子数据，删除 arrangement 时只级联第二轮响应。用户和来源小组不是子数据，不级联删除；被引用的 user/group 目前禁止硬删除。成员关系不被 outing 外键引用，删除成员关系不删除 outing 数据。本轮不开放 outing/arrangement 删除、退组或账号注销 API。
+
+权限、阶段和开始时间检查由 Go 事务执行，同一 outing 的命令通过行锁串行化，不使用 version 或幂等键。数据库用局部完整性 trigger 保证 Accept 至少有一段空闲、Deny 无空闲，并保留响应状态、字段完整性、主外键和唯一性约束；数值与日期范围、步长、文本长度和空闲段数量上限由 Go 校验。无自动邀请、阶段或不可修改 trigger。自动聚合、候选生成和完整 My Outings 产品视图留给后续 Issue。

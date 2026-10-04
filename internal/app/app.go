@@ -17,6 +17,7 @@ import (
 	"github.com/Jason-skd/play-pair/internal/db"
 	"github.com/Jason-skd/play-pair/internal/errs"
 	"github.com/Jason-skd/play-pair/internal/group"
+	"github.com/Jason-skd/play-pair/internal/outing"
 	"github.com/Jason-skd/play-pair/internal/preference"
 	"github.com/Jason-skd/play-pair/internal/profile"
 	"github.com/Jason-skd/play-pair/internal/session"
@@ -47,7 +48,7 @@ func Start(ctx context.Context, c config.Config, logger *slog.Logger) (*App, err
 	}
 	a := &App{listener: listener, database: database, logger: logger}
 	sessions := session.New(database, time.Now)
-	services := api.Services{Groups: group.New(database), Credentials: credentials.New(database, sessions, time.Now), Sessions: sessions, Users: database, Profiles: profile.New(database), Preferences: preference.New(database)}
+	services := api.Services{Outings: outing.New(database, time.Now), Groups: group.New(database), Credentials: credentials.New(database, sessions, time.Now), Sessions: sessions, Users: database, Profiles: profile.New(database), Preferences: preference.New(database)}
 	a.server = &http.Server{Handler: api.New(func(ctx context.Context) error {
 		if !a.ready.Load() {
 			return errs.DependencyUnavailable

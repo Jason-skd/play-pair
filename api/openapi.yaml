@@ -3,6 +3,278 @@ info:
   title: PlayPair API
   version: 0.1.0
 paths:
+  "/api/v1/groups/{groupId}/outings":
+    post:
+      operationId: createOuting
+      description: Publish as a current group member. No response rows are created.
+        Dates use the immutable IANA timezone. Body limit 64 KiB; 20 writes per actor
+        and operation per 10 minutes.
+      security:
+      - CookieSession: []
+      parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      - &outingWriteHeader
+        "$ref": "#/components/parameters/BrowserWriteHeader"
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Outing"
+        default:
+          "$ref": "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateOutingRequest"
+  "/api/v1/outings":
+    get:
+      operationId: listOutings
+      description: Visible outings, including retained responses after leaving a group.
+        Optional groupId filters the source group, without changing access. Ordered
+        by id.
+      security:
+      - CookieSession: []
+      parameters:
+      - name: groupId
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      - name: afterId
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      - &outingPageLimit
+        name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/OutingPage"
+        default:
+          "$ref": "#/components/responses/Error"
+  "/api/v1/outings/{outingId}":
+    get:
+      operationId: getOuting
+      description: 'Outing and own responses/input in both rounds. Warnings are computed
+        only during decision. Missing decisions after arrangement creation are not_participated.
+        Access: organizer, current group member, decision respondent, or existing confirmation
+        row (including reset rows).'
+      security:
+      - CookieSession: []
+      parameters:
+      - &outingIdParameter
+        name: outingId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/OutingDetail"
+        default:
+          "$ref": "#/components/responses/Error"
+    put:
+      operationId: updateOuting
+      description: Organizer replaces dates and duration before start. Timezone, group
+        and organizer cannot change. Existing inputs are retained even when outside
+        the new dates.
+      security:
+      - CookieSession: []
+      parameters:
+      - *outingIdParameter
+      - *outingWriteHeader
+      responses:
+        '204':
+          description: Saved
+        default:
+          "$ref": "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/OutingPlan"
+  "/api/v1/outings/{outingId}/responses":
+    get:
+      operationId: listOutingResponses
+      description: Both rounds, optional phase/status filters. Pending is derived before
+        filtering and pagination. No private inputs. Ordered by memberId then phase;
+        confirmation summaries exist only after an arrangement; decision summaries after
+        that contain actual decision respondents only.
+      security:
+      - CookieSession: []
+      parameters:
+      - *outingIdParameter
+      - name: phase
+        in: query
+        required: false
+        schema:
+          "$ref": "#/components/schemas/OutingPhase"
+      - name: status
+        in: query
+        required: false
+        schema:
+          "$ref": "#/components/schemas/ResponseStatus"
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - *outingPageLimit
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ResponsePage"
+        default:
+          "$ref": "#/components/responses/Error"
+  "/api/v1/outings/{outingId}/members/{memberId}":
+    get:
+      operationId: getOutingMember
+      description: Full responses and input visible only to that member or organizer.
+        Decision input remains readable during confirmation; warnings are returned only
+        during decision.
+      security:
+      - CookieSession: []
+      parameters:
+      - *outingIdParameter
+      - name: memberId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/OutingMember"
+        default:
+          "$ref": "#/components/responses/Error"
+  "/api/v1/outings/{outingId}/responses/decision":
+    put:
+      operationId: respondDecision
+      description: Own decision only, during decision phase. Accept requires explicit
+        complete input; deny forbids input and removes previous input. Half-hour local
+        intervals must use current candidate dates; overlaps are merged. Last serialized
+        write wins; no version or idempotency key.
+      security:
+      - CookieSession: []
+      parameters:
+      - *outingIdParameter
+      - *outingWriteHeader
+      responses:
+        '204':
+          description: Saved
+        default:
+          "$ref": "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/DecisionRequest"
+  "/api/v1/outings/{outingId}/responses/confirmation":
+    put:
+      operationId: respondConfirmation
+      description: Own accept/deny for the current arrangement before its start. No
+        first-round input is changed. A new response creates a row; reset rows retain
+        access.
+      security:
+      - CookieSession: []
+      parameters:
+      - *outingIdParameter
+      - *outingWriteHeader
+      responses:
+        '204':
+          description: Saved
+        default:
+          "$ref": "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/ConfirmationRequest"
+  "/api/v1/outings/{outingId}/arrangement":
+    post:
+      operationId: createArrangement
+      description: Organizer manually records the chosen future arrangement and opens
+        confirmation. Does not generate candidates or create response rows.
+      security:
+      - CookieSession: []
+      parameters:
+      - *outingIdParameter
+      - *outingWriteHeader
+      responses:
+        '201':
+          description: Saved
+        default:
+          "$ref": "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/Arrangement"
+    put:
+      operationId: updateArrangement
+      description: 'Organizer updates an existing arrangement before its current start.
+        resetResponses is required: true clears every confirmation choice but retains
+        rows/access; false preserves choices under organizer responsibility. New start
+        must also be in the future.'
+      security:
+      - CookieSession: []
+      parameters:
+      - *outingIdParameter
+      - *outingWriteHeader
+      responses:
+        '204':
+          description: Saved
+        default:
+          "$ref": "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/UpdateArrangement"
   /api/v1/groups:
     post:
       operationId: createGroup
@@ -244,6 +516,290 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    OutingPhase:
+      type: string
+      enum:
+      - decision
+      - confirmation
+    OutingChoice:
+      type: string
+      enum:
+      - accept
+      - deny
+    ResponseStatus:
+      type: string
+      enum:
+      - pending
+      - accept
+      - deny
+    OutingPlan:
+      type: object
+      additionalProperties: false
+      required:
+      - dates
+      - durationMinutes
+      properties:
+        dates: &outingDates
+          type: array
+          items:
+            type: string
+            format: date
+          minItems: 1
+          maxItems: 31
+        durationMinutes: &outingDuration
+          type: integer
+          minimum: 30
+          maximum: 1440
+          multipleOf: 30
+    CreateOutingRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - dates
+      - durationMinutes
+      - timezone
+      properties:
+        dates: *outingDates
+        durationMinutes: *outingDuration
+        timezone:
+          type: string
+    OutingAvailability:
+      type: object
+      additionalProperties: false
+      required:
+      - date
+      - startTime
+      - endTime
+      properties:
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+        endTime:
+          type: string
+    OutingInput:
+      type: object
+      additionalProperties: false
+      required:
+      - maxBudgetFen
+      - requiresWheelchairAccess
+      - availability
+      properties:
+        maxBudgetFen:
+          type: integer
+          format: int64
+          minimum: 0
+        requiresWheelchairAccess:
+          type: boolean
+        availability:
+          type: array
+          items:
+            "$ref": "#/components/schemas/OutingAvailability"
+          minItems: 1
+          maxItems: 256
+    DecisionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - choice
+      properties:
+        choice:
+          "$ref": "#/components/schemas/OutingChoice"
+        input:
+          "$ref": "#/components/schemas/OutingInput"
+    ConfirmationRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - choice
+      properties:
+        choice:
+          "$ref": "#/components/schemas/OutingChoice"
+    Arrangement:
+      type: object
+      additionalProperties: false
+      required:
+      - startsAt
+      - endsAt
+      - place
+      - activity
+      properties:
+        startsAt: &arrangementStart
+          type: string
+          format: date-time
+        endsAt: &arrangementEnd
+          type: string
+          format: date-time
+        place: &arrangementPlace
+          type: string
+          minLength: 1
+          maxLength: 500
+        activity: &arrangementActivity
+          type: string
+          minLength: 1
+          maxLength: 500
+    UpdateArrangement:
+      type: object
+      additionalProperties: false
+      required:
+      - startsAt
+      - endsAt
+      - place
+      - activity
+      - resetResponses
+      properties:
+        startsAt: *arrangementStart
+        endsAt: *arrangementEnd
+        place: *arrangementPlace
+        activity: *arrangementActivity
+        resetResponses:
+          type: boolean
+    OutingWarning:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          enum:
+          - date_outside_plan
+          - no_sufficient_availability
+        availabilityIndex:
+          type: integer
+          minimum: 0
+    OutingMember:
+      type: object
+      additionalProperties: false
+      required:
+      - memberId
+      - decision
+      - confirmation
+      - warnings
+      properties:
+        memberId:
+          type: integer
+          format: int64
+          minimum: 1
+        decision:
+          type: string
+          enum:
+          - pending
+          - accept
+          - deny
+          - not_participated
+        confirmation:
+          type: string
+          enum:
+          - pending
+          - accept
+          - deny
+          - not_started
+        input:
+          "$ref": "#/components/schemas/OutingInput"
+        warnings:
+          type: array
+          items:
+            "$ref": "#/components/schemas/OutingWarning"
+    Outing:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - groupId
+      - initiatorId
+      - timezone
+      - dates
+      - durationMinutes
+      - createdAt
+      - status
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        groupId:
+          type: integer
+          format: int64
+          minimum: 1
+        initiatorId:
+          type: integer
+          format: int64
+          minimum: 1
+        timezone:
+          type: string
+        dates:
+          type: array
+          items:
+            type: string
+            format: date
+        durationMinutes:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+          - decision
+          - confirmation
+          - archived
+        arrangement:
+          "$ref": "#/components/schemas/Arrangement"
+    OutingDetail:
+      type: object
+      additionalProperties: false
+      required:
+      - outing
+      - member
+      properties:
+        outing:
+          "$ref": "#/components/schemas/Outing"
+        member:
+          "$ref": "#/components/schemas/OutingMember"
+    OutingPage:
+      type: object
+      additionalProperties: false
+      required:
+      - outings
+      properties:
+        outings:
+          type: array
+          items:
+            "$ref": "#/components/schemas/Outing"
+        nextAfterId:
+          type: integer
+          format: int64
+          minimum: 1
+    ResponseSummary:
+      type: object
+      additionalProperties: false
+      required:
+      - memberId
+      - phase
+      - status
+      properties:
+        memberId:
+          type: integer
+          format: int64
+          minimum: 1
+        phase:
+          "$ref": "#/components/schemas/OutingPhase"
+        status:
+          "$ref": "#/components/schemas/ResponseStatus"
+    ResponsePage:
+      type: object
+      additionalProperties: false
+      required:
+      - responses
+      properties:
+        responses:
+          type: array
+          items:
+            "$ref": "#/components/schemas/ResponseSummary"
+        nextCursor:
+          type: string
     CreateGroupRequest:
       type: object
       additionalProperties: false
@@ -376,6 +932,6 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_input, idempotency_conflict, version_conflict, email_conflict, invalid_credentials, unauthenticated, forbidden, rate_limited, csrf_rejected, dependency_unavailable, not_found, method_not_allowed, internal_error]
+              enum: [invalid_availability, phase_conflict, outing_archived, invalid_input, idempotency_conflict, version_conflict, email_conflict, invalid_credentials, unauthenticated, forbidden, rate_limited, csrf_rejected, dependency_unavailable, not_found, method_not_allowed, internal_error]
             message: {type: string, minLength: 1}
             requestId: {type: string, minLength: 1}

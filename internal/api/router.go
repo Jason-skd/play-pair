@@ -9,6 +9,7 @@ import (
 	"github.com/Jason-skd/play-pair/internal/api/generated"
 	"github.com/Jason-skd/play-pair/internal/credentials"
 	"github.com/Jason-skd/play-pair/internal/group"
+	"github.com/Jason-skd/play-pair/internal/outing"
 	"github.com/Jason-skd/play-pair/internal/preference"
 	"github.com/Jason-skd/play-pair/internal/profile"
 	"github.com/Jason-skd/play-pair/internal/session"
@@ -27,6 +28,7 @@ type UserReader interface {
 // Services supplies the router's explicit dependencies, assembled by the caller.
 // Account authentication stays separate from display and preference operations.
 type Services struct {
+	Outings     *outing.Service
 	Groups      *group.Service
 	Preferences *preference.Service
 	Profiles    *profile.Service
@@ -61,6 +63,17 @@ func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, services
 	}}
 	groups := r.Group("/api/v1/groups", func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.Next() }, s.requireUser())
 	groups.POST("", wrapper.CreateGroup)
+	groups.POST("/:groupId/outings", wrapper.CreateOuting)
+	outings := r.Group("/api/v1/outings", func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.Next() }, s.requireUser())
+	outings.GET("", wrapper.ListOutings)
+	outings.GET("/:outingId", wrapper.GetOuting)
+	outings.PUT("/:outingId", wrapper.UpdateOuting)
+	outings.GET("/:outingId/responses", wrapper.ListOutingResponses)
+	outings.GET("/:outingId/members/:memberId", wrapper.GetOutingMember)
+	outings.PUT("/:outingId/responses/decision", wrapper.RespondDecision)
+	outings.PUT("/:outingId/responses/confirmation", wrapper.RespondConfirmation)
+	outings.POST("/:outingId/arrangement", wrapper.CreateArrangement)
+	outings.PUT("/:outingId/arrangement", wrapper.UpdateArrangement)
 	groups.POST("/join", wrapper.JoinGroup)
 	groups.GET("/:groupId", wrapper.GetGroup)
 	groups.GET("/:groupId/members", wrapper.GetGroupMembers)
