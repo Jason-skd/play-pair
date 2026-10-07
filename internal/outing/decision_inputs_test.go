@@ -25,13 +25,13 @@ func TestAggregateExplicitInputsAndStableConstraints(t *testing.T) {
 	}
 	original := slices.Clone(inputs[0].Input.Availability)
 	result, err := aggregateInputs(decisionOuting(), inputs)
-	if err != nil || result.MaxBudgetFen != 0 || !result.RequiresWheelchairAccess || len(result.StartTimes) != 1 || len(result.Constraints) != 4 {
+	if err != nil || result.MaxBudgetFen != 0 || !result.RequiresWheelchairAccess || len(result.CommonWindows) != 1 || len(result.Constraints) != 4 {
 		t.Fatal(result, err)
 	}
 	if !reflect.DeepEqual(inputs[0].Input.Availability, original) {
 		t.Fatal("mutated caller input")
 	}
-	if result.Participants[0].MemberID != 1 || result.StartTimes[0].Format(time.RFC3339) != "2026-10-10T11:00:00+08:00" {
+	if result.CommonWindows[0].StartsAt.Format(time.RFC3339) != "2026-10-10T11:00:00+08:00" || result.CommonWindows[0].EndsAt.Format(time.RFC3339) != "2026-10-10T12:00:00+08:00" || !reflect.DeepEqual(result.Constraints[0].Sources, []ConstraintSource{{MemberID: 1, Field: "maxBudgetFen"}, {MemberID: 2, Field: "maxBudgetFen"}}) {
 		t.Fatal(result)
 	}
 	for _, constraint := range result.Constraints {
@@ -63,16 +63,16 @@ func TestAggregateWindows(t *testing.T) {
 		zone        string
 		duration    int
 		left, right []Availability
-		starts      []string
+		windows     [][2]string
 		err         error
 	}{
 		{"half-open touching", "UTC", 30, []Availability{{"2026-10-10", 600, 660}}, []Availability{{"2026-10-10", 660, 720}}, nil, ErrNoCommonTime},
-		{"adjacent member intervals", "UTC", 90, []Availability{{"2026-10-10", 600, 660}, {"2026-10-10", 660, 720}}, []Availability{{"2026-10-10", 600, 720}}, []string{"2026-10-10T10:00:00Z", "2026-10-10T10:30:00Z"}, nil},
-		{"across midnight", "Asia/Shanghai", 90, []Availability{{"2026-10-10", 1380, 1440}, {"2026-10-11", 0, 90}}, []Availability{{"2026-10-10", 1410, 1440}, {"2026-10-11", 0, 60}}, []string{"2026-10-10T23:30:00+08:00"}, nil},
+		{"adjacent member intervals", "UTC", 90, []Availability{{"2026-10-10", 600, 660}, {"2026-10-10", 660, 720}}, []Availability{{"2026-10-10", 600, 720}}, [][2]string{{"2026-10-10T10:00:00Z", "2026-10-10T12:00:00Z"}}, nil},
+		{"across midnight", "Asia/Shanghai", 90, []Availability{{"2026-10-10", 1380, 1440}, {"2026-10-11", 0, 90}}, []Availability{{"2026-10-10", 1410, 1440}, {"2026-10-11", 0, 60}}, [][2]string{{"2026-10-10T23:30:00+08:00", "2026-10-11T01:00:00+08:00"}}, nil},
 		{"stale member not dropped", "UTC", 60, []Availability{{"2026-10-09", 600, 720}}, []Availability{{"2026-10-10", 600, 720}}, nil, ErrNoCommonTime},
-		{"stale interval excluded", "UTC", 60, []Availability{{"2026-10-09", 600, 720}, {"2026-10-10", 600, 660}}, []Availability{{"2026-10-10", 600, 720}}, []string{"2026-10-10T10:00:00Z"}, nil},
+		{"stale interval excluded", "UTC", 60, []Availability{{"2026-10-09", 600, 720}, {"2026-10-10", 600, 660}}, []Availability{{"2026-10-10", 600, 720}}, [][2]string{{"2026-10-10T10:00:00Z", "2026-10-10T11:00:00Z"}}, nil},
 		{"duration too long", "UTC", 90, []Availability{{"2026-10-10", 600, 660}}, []Availability{{"2026-10-10", 600, 660}}, nil, ErrNoCommonTime},
-		{"quarter-hour timezone offset", "Asia/Kathmandu", 60, []Availability{{"2026-10-10", 600, 690}}, []Availability{{"2026-10-10", 600, 690}}, []string{"2026-10-10T10:00:00+05:45", "2026-10-10T10:30:00+05:45"}, nil},
+		{"quarter-hour timezone offset", "Asia/Kathmandu", 60, []Availability{{"2026-10-10", 600, 690}}, []Availability{{"2026-10-10", 600, 690}}, [][2]string{{"2026-10-10T10:00:00+05:45", "2026-10-10T11:30:00+05:45"}}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			current := decisionOuting()
@@ -85,12 +85,12 @@ func TestAggregateWindows(t *testing.T) {
 			if err != nil {
 				return
 			}
-			got := []string{}
-			for _, start := range result.StartTimes {
-				got = append(got, start.Format(time.RFC3339))
+			got := [][2]string{}
+			for _, window := range result.CommonWindows {
+				got = append(got, [2]string{window.StartsAt.Format(time.RFC3339), window.EndsAt.Format(time.RFC3339)})
 			}
-			if !reflect.DeepEqual(got, tc.starts) {
-				t.Fatal(got, tc.starts)
+			if !reflect.DeepEqual(got, tc.windows) {
+				t.Fatal(got, tc.windows)
 			}
 		})
 	}
@@ -135,7 +135,8 @@ func TestAggregateInvalidInputAndLimits(t *testing.T) {
 		current.Dates = append(current.Dates, d)
 		fullDays = append(fullDays, Availability{d, 0, 1440})
 	}
-	if _, err := aggregateInputs(current, []ParticipantInput{participant(1, 0, false, fullDays...)}); !errors.Is(err, ErrAggregationCapacity) {
-		t.Fatal(err)
+	result, err := aggregateInputs(current, []ParticipantInput{participant(1, 0, false, fullDays...)})
+	if err != nil || len(result.CommonWindows) != 1 || result.CommonWindows[0].StartsAt.Format(time.RFC3339) != "2026-10-01T00:00:00+08:00" || result.CommonWindows[0].EndsAt.Format(time.RFC3339) != "2026-11-01T00:00:00+08:00" {
+		t.Fatal(result, err)
 	}
 }

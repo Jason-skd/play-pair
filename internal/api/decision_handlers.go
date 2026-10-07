@@ -27,13 +27,7 @@ func decisionInputsObject(result outing.Aggregation) generated.DecisionInputs {
 	response := generated.DecisionInputs{
 		OutingId: int64(result.OutingID), Timezone: result.Timezone, DurationMinutes: result.DurationMinutes,
 		MaxBudgetFen: result.MaxBudgetFen, RequiresWheelchairAccess: result.RequiresWheelchairAccess,
-		Participants: []generated.DecisionParticipant{}, CommonWindows: []generated.TimeWindow{},
-		StartTimes: result.StartTimes, Constraints: []generated.HardConstraint{},
-	}
-	for _, participant := range result.Participants {
-		// Reuse the existing private-input projection; no defaults are read.
-		member := outingMember(outing.Detail{Member: outing.Member{Input: &participant.Input}})
-		response.Participants = append(response.Participants, generated.DecisionParticipant{MemberId: int64(participant.MemberID), Input: *member.Input})
+		CommonWindows: []generated.TimeWindow{}, Constraints: []generated.HardConstraint{},
 	}
 	for _, window := range result.CommonWindows {
 		response.CommonWindows = append(response.CommonWindows, timeWindowObject(window))

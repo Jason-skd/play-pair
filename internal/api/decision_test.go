@@ -48,8 +48,24 @@ func TestDecisionInputsHTTP(t *testing.T) {
 	}
 	w := request("/api/v1/outings/41/decision-inputs", true)
 	var result generated.DecisionInputs
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil || len(result.Participants) != 1 || result.MaxBudgetFen != 0 || result.RequiresWheelchairAccess || len(result.Constraints) != 3 || len(result.StartTimes) != 3 || q.saves != 0 {
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil || result.MaxBudgetFen != 0 || result.RequiresWheelchairAccess || len(result.Constraints) != 3 || len(result.CommonWindows) != 1 || q.saves != 0 {
 		t.Fatal(w.Code, w.Body.String())
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &fields); err != nil {
+		t.Fatal(err)
+	}
+	wantFields := []string{"outingId", "timezone", "durationMinutes", "maxBudgetFen", "requiresWheelchairAccess", "commonWindows", "constraints"}
+	if len(fields) != len(wantFields) {
+		t.Fatal("unexpected aggregation fields", w.Body.String())
+	}
+	for _, field := range wantFields {
+		if _, ok := fields[field]; !ok {
+			t.Fatal("missing aggregation field", field)
+		}
+	}
+	if result.CommonWindows[0].StartsAt.Format(time.RFC3339) != "2026-10-10T10:00:00+08:00" || result.CommonWindows[0].EndsAt.Format(time.RFC3339) != "2026-10-10T12:00:00+08:00" || len(result.Constraints[0].Sources) != 1 || result.Constraints[0].Sources[0].MemberId != int64(account.ID) {
+		t.Fatal(result)
 	}
 	if w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal(w.Header())

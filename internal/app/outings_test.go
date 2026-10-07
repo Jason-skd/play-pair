@@ -140,7 +140,7 @@ func TestOutingsApplication(t *testing.T) {
 	if err := json.Unmarshal(request(0, "GET", path+"/decision-inputs", nil, 200), &aggregation); err != nil {
 		t.Fatal(err)
 	}
-	if len(aggregation.Participants) != 1 || aggregation.Participants[0].MemberId != ids[1] || aggregation.MaxBudgetFen != 0 || len(aggregation.StartTimes) != 3 || len(aggregation.Constraints) != 3 {
+	if aggregation.MaxBudgetFen != 0 || len(aggregation.CommonWindows) != 1 || aggregation.CommonWindows[0].StartsAt.Format(time.DateOnly) != date || aggregation.CommonWindows[0].EndsAt.Sub(aggregation.CommonWindows[0].StartsAt) != 2*time.Hour || len(aggregation.Constraints) != 3 || len(aggregation.Constraints[0].Sources) != 1 || aggregation.Constraints[0].Sources[0].MemberId != ids[1] {
 		t.Fatal(aggregation)
 	}
 	request(0, "PUT", path, map[string]any{"dates": []string{time.Now().UTC().AddDate(0, 0, 8).Format(time.DateOnly)}, "durationMinutes": 60}, 204)

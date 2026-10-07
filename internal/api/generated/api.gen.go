@@ -583,21 +583,13 @@ type CreateOutingRequest struct {
 
 // DecisionInputs defines model for DecisionInputs.
 type DecisionInputs struct {
-	CommonWindows            []TimeWindow          `json:"commonWindows"`
-	Constraints              []HardConstraint      `json:"constraints"`
-	DurationMinutes          int                   `json:"durationMinutes"`
-	MaxBudgetFen             int64                 `json:"maxBudgetFen"`
-	OutingId                 int64                 `json:"outingId"`
-	Participants             []DecisionParticipant `json:"participants"`
-	RequiresWheelchairAccess bool                  `json:"requiresWheelchairAccess"`
-	StartTimes               []time.Time           `json:"startTimes"`
-	Timezone                 string                `json:"timezone"`
-}
-
-// DecisionParticipant defines model for DecisionParticipant.
-type DecisionParticipant struct {
-	Input    OutingInput `json:"input"`
-	MemberId int64       `json:"memberId"`
+	CommonWindows            []TimeWindow     `json:"commonWindows"`
+	Constraints              []HardConstraint `json:"constraints"`
+	DurationMinutes          int              `json:"durationMinutes"`
+	MaxBudgetFen             int64            `json:"maxBudgetFen"`
+	OutingId                 int64            `json:"outingId"`
+	RequiresWheelchairAccess bool             `json:"requiresWheelchairAccess"`
+	Timezone                 string           `json:"timezone"`
 }
 
 // DecisionRequest defines model for DecisionRequest.

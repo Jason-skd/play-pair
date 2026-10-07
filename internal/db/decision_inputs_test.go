@@ -25,7 +25,7 @@ func TestDecisionAggregationCurrentInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := service.Aggregate(ctx, ids[1], current.ID)
-	if err != nil || len(result.Participants) != 1 || result.Participants[0].MemberID != ids[2] || result.MaxBudgetFen != 0 || len(result.StartTimes) != 3 {
+	if err != nil || len(result.Constraints[0].Sources) != 1 || result.Constraints[0].Sources[0].MemberID != ids[2] || result.MaxBudgetFen != 0 || len(result.CommonWindows) != 1 {
 		t.Fatal(result, err)
 	}
 	input := outingInput()
@@ -35,7 +35,7 @@ func TestDecisionAggregationCurrentInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err = service.Aggregate(ctx, ids[1], current.ID)
-	if err != nil || len(result.Participants) != 2 || result.MaxBudgetFen != 0 || !result.RequiresWheelchairAccess {
+	if err != nil || len(result.Constraints[0].Sources) != 2 || result.MaxBudgetFen != 0 || !result.RequiresWheelchairAccess {
 		t.Fatal(result, err)
 	}
 	if err := service.Update(ctx, ids[1], current.ID, outing.Plan{Dates: []outing.Date{"2026-10-11"}, DurationMinutes: 60}); err != nil {
@@ -59,7 +59,7 @@ func TestDecisionAggregationCurrentInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err = service.Aggregate(ctx, ids[1], current.ID)
-	if err != nil || len(result.Participants) != 1 || result.Participants[0].MemberID != ids[1] {
+	if err != nil || len(result.Constraints[0].Sources) != 1 || result.Constraints[0].Sources[0].MemberID != ids[1] {
 		t.Fatal(result, err)
 	}
 	if err := service.Arrange(ctx, ids[1], current.ID, outingArrangement(), false, false); err != nil {
@@ -104,7 +104,7 @@ func TestDecisionInputRepeatableReadSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := service.Aggregate(ctx, ids[1], current.ID)
-	if err != nil || result.DurationMinutes != 90 || result.MaxBudgetFen != 12000 || result.Participants[0].Input.Availability[0].Date != "2026-10-11" {
+	if err != nil || result.DurationMinutes != 90 || result.MaxBudgetFen != 12000 || len(result.CommonWindows) != 1 || result.CommonWindows[0].StartsAt.Format("2006-01-02") != "2026-10-11" {
 		t.Fatal(result, err)
 	}
 }
@@ -139,7 +139,7 @@ func TestDecisionMemberCapacityRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := service.Aggregate(ctx, ids[1], current.ID)
-	if err != nil || len(result.Participants) != outing.MaxAggregationMembers {
+	if err != nil || len(result.Constraints[0].Sources) != outing.MaxAggregationMembers {
 		t.Fatal(result, err)
 	}
 	if err := service.Respond(ctx, ids[1], current.ID, outing.Decision, outing.Accept, outingInput()); err != nil {

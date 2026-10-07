@@ -14,7 +14,8 @@ func validationFixture(t *testing.T) ([]Constraint, Proposal) {
 		t.Fatal(err)
 	}
 	cost, access := int64(10000), true
-	proposal := Proposal{Schedule: TimeWindow{StartsAt: result.StartTimes[0], EndsAt: result.StartTimes[0].Add(time.Hour)}, CostPerPersonFen: &cost, WheelchairAccess: &access}
+	start := result.CommonWindows[0].StartsAt
+	proposal := Proposal{Schedule: TimeWindow{StartsAt: start, EndsAt: start.Add(time.Hour)}, CostPerPersonFen: &cost, WheelchairAccess: &access}
 	for _, constraint := range result.Constraints {
 		proposal.Answers = append(proposal.Answers, ConstraintAnswer{ConstraintID: constraint.ID, Status: Satisfied, Evidence: "provider source"})
 	}

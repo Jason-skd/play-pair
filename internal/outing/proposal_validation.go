@@ -141,7 +141,7 @@ func validConstraintSet(constraints []Constraint) bool {
 				return false
 			}
 		case ConstraintTime:
-			if constraint.Scope != ScopeSchedule || len(constraint.Windows) == 0 || len(constraint.Windows) > MaxStartTimes || constraint.MaxBudgetFen != nil || constraint.DurationMinutes != nil {
+			if constraint.Scope != ScopeSchedule || len(constraint.Windows) == 0 || len(constraint.Windows) > MaxAggregationMembers*256 || constraint.MaxBudgetFen != nil || constraint.DurationMinutes != nil {
 				return false
 			}
 			for _, window := range constraint.Windows {

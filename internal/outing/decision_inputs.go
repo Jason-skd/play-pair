@@ -12,12 +12,8 @@ import (
 	"github.com/Jason-skd/play-pair/internal/users"
 )
 
-// Limits bound both database reads and the provider input size. Capacity failure
-// never truncates the participating members or the feasible start times.
-const (
-	MaxAggregationMembers = 128
-	MaxStartTimes         = 1024
-)
+// MaxAggregationMembers bounds database reads without truncating participants.
+const MaxAggregationMembers = 128
 
 var (
 	ErrNoParticipants      = errors.New("outing has no accepted inputs")
@@ -27,8 +23,8 @@ var (
 	ErrConstraintContract  = errors.New("invalid constraint contract")
 )
 
-// ParticipantInput retains explicit input and attribution for the recommendation
-// consumer. It does not include defaults or convert soft preferences into rules.
+// ParticipantInput supplies explicit input and attribution for aggregation.
+// It does not include defaults or convert soft preferences into rules.
 type ParticipantInput struct {
 	MemberID users.ID
 	Input    MemberInput
@@ -81,11 +77,9 @@ type Aggregation struct {
 	OutingID                 ID
 	Timezone                 string
 	DurationMinutes          int
-	Participants             []ParticipantInput
 	MaxBudgetFen             int64
 	RequiresWheelchairAccess bool
 	CommonWindows            []TimeWindow
-	StartTimes               []time.Time
 	Constraints              []Constraint
 }
 
@@ -137,10 +131,11 @@ func aggregateInputs(current Outing, participants []ParticipantInput) (Aggregati
 	}
 	result := Aggregation{
 		OutingID: current.ID, Timezone: current.Timezone, DurationMinutes: current.DurationMinutes,
-		Participants: slices.Clone(participants), MaxBudgetFen: participants[0].Input.MaxBudgetFen,
-		CommonWindows: []TimeWindow{}, StartTimes: []time.Time{}, Constraints: []Constraint{},
+		MaxBudgetFen:  participants[0].Input.MaxBudgetFen,
+		CommonWindows: []TimeWindow{}, Constraints: []Constraint{},
 	}
-	slices.SortFunc(result.Participants, func(a, b ParticipantInput) int {
+	participants = slices.Clone(participants)
+	slices.SortFunc(participants, func(a, b ParticipantInput) int {
 		if a.MemberID < b.MemberID {
 			return -1
 		}
@@ -153,9 +148,9 @@ func aggregateInputs(current Outing, participants []ParticipantInput) (Aggregati
 	// Validate every participating input before intersecting. An empty early
 	// intersection must not hide a later corrupt input or silently drop a member.
 	memberWindows := make([][]TimeWindow, 0, len(participants))
-	for i := range result.Participants {
-		participant := &result.Participants[i]
-		if participant.MemberID <= 0 || (i > 0 && result.Participants[i-1].MemberID == participant.MemberID) {
+	for i := range participants {
+		participant := &participants[i]
+		if participant.MemberID <= 0 || (i > 0 && participants[i-1].MemberID == participant.MemberID) {
 			return Aggregation{}, ErrAggregationInput
 		}
 		input, windows, err := currentAvailability(participant.Input, current, loc)
@@ -176,15 +171,9 @@ func aggregateInputs(current Outing, participants []ParticipantInput) (Aggregati
 	for _, windows := range memberWindows[1:] {
 		result.CommonWindows = intersectWindows(result.CommonWindows, windows)
 	}
-	for _, window := range result.CommonWindows {
-		for start := window.StartsAt; !start.Add(time.Duration(current.DurationMinutes) * time.Minute).After(window.EndsAt); start = start.Add(30 * time.Minute) {
-			if len(result.StartTimes) == MaxStartTimes {
-				return Aggregation{}, ErrAggregationCapacity
-			}
-			result.StartTimes = append(result.StartTimes, start)
-		}
-	}
-	if len(result.StartTimes) == 0 {
+	if !slices.ContainsFunc(result.CommonWindows, func(window TimeWindow) bool {
+		return window.EndsAt.Sub(window.StartsAt) >= time.Duration(current.DurationMinutes)*time.Minute
+	}) {
 		return Aggregation{}, ErrNoCommonTime
 	}
 	result.Constraints = append(result.Constraints,
@@ -200,7 +189,7 @@ func aggregateInputs(current Outing, participants []ParticipantInput) (Aggregati
 	encoded, err := json.Marshal(struct {
 		Outing Outing
 		Inputs []ParticipantInput
-	}{Outing: Outing{ID: current.ID, Timezone: current.Timezone, Plan: current.Plan}, Inputs: result.Participants})
+	}{Outing: Outing{ID: current.ID, Timezone: current.Timezone, Plan: current.Plan}, Inputs: participants})
 	if err != nil {
 		return Aggregation{}, ErrAggregationInput
 	}
@@ -216,7 +205,7 @@ func currentAvailability(input MemberInput, current Outing, loc *time.Location) 
 		return MemberInput{}, nil, ErrAggregationCapacity
 	}
 	// Validate stale dates too, then exclude them using the current plan. The
-	// stored submission remains intact in the returned participant input.
+	// normalized input remains local to the calculation and constraint-ID hash.
 	dates := make([]Date, 0, len(input.Availability))
 	for _, interval := range input.Availability {
 		if _, err := ParseDate(string(interval.Date)); err != nil {

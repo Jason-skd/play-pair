@@ -135,9 +135,11 @@ paths:
         participate; waiting for the entire group is not required. No result is persisted.
         Budgets use CNY fen per person for the whole outing. Stale dates are excluded
         without dropping participants. Intervals are half-open and consecutive dates
-        can form a window across midnight; start times follow the outing timezone's
-        half-hour grid and must fit the exact current duration. At most 128 participants,
-        256 intervals per member, and 1024 start times; overflow is never truncated.
+        can form a window across midnight and must allow the current duration.
+        The result contains common conditions and constraint sources only; member
+        input and derived start times are not returned. Proposal starts follow the
+        outing timezone's half-hour grid. At most 128 participants and 256 intervals
+        per member; overflow is never truncated.
         No inputs, malformed inputs, no feasible common time and capacity overflow
         have distinct errors. IDs are stable for equal normalized inputs and config.
         Soft preferences are not hard constraints. The Go ValidateProposal contract
@@ -553,14 +555,6 @@ components:
       properties:
         startsAt: {type: string, format: date-time}
         endsAt: {type: string, format: date-time}
-    DecisionParticipant:
-      type: object
-      additionalProperties: false
-      required: [memberId, input]
-      properties:
-        memberId: {type: integer, format: int64, minimum: 1}
-        input:
-          "$ref": "#/components/schemas/OutingInput"
     ConstraintSource:
       type: object
       additionalProperties: false
@@ -605,28 +599,17 @@ components:
     DecisionInputs:
       type: object
       additionalProperties: false
-      required: [outingId, timezone, durationMinutes, participants, maxBudgetFen, requiresWheelchairAccess, commonWindows, startTimes, constraints]
+      required: [outingId, timezone, durationMinutes, maxBudgetFen, requiresWheelchairAccess, commonWindows, constraints]
       properties:
         outingId: {type: integer, format: int64, minimum: 1}
         timezone: {type: string}
         durationMinutes: {type: integer}
-        participants:
-          type: array
-          minItems: 1
-          maxItems: 128
-          items:
-            "$ref": "#/components/schemas/DecisionParticipant"
         maxBudgetFen: {type: integer, format: int64, minimum: 0}
         requiresWheelchairAccess: {type: boolean}
         commonWindows:
           type: array
           items:
             "$ref": "#/components/schemas/TimeWindow"
-        startTimes:
-          type: array
-          minItems: 1
-          maxItems: 1024
-          items: {type: string, format: date-time}
         constraints:
           type: array
           minItems: 3
