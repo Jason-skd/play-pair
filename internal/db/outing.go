@@ -22,7 +22,7 @@ func outingError(err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errs.NotFound
 	}
-	for _, knownErr := range []error{errs.NotFound, outing.ErrForbidden, outing.ErrInvalidInput, outing.ErrInvalidAvailability, outing.ErrPhase, outing.ErrArchived} {
+	for _, knownErr := range []error{errs.NotFound, outing.ErrForbidden, outing.ErrInvalidInput, outing.ErrInvalidAvailability, outing.ErrPhase, outing.ErrArchived, outing.ErrNoParticipants, outing.ErrNoCommonTime, outing.ErrAggregationCapacity, outing.ErrAggregationInput} {
 		if errors.Is(err, knownErr) {
 			return err
 		}
@@ -163,6 +163,41 @@ func (s *outingStore) Member(ctx context.Context, id outing.ID, actor users.ID) 
 	}
 	member.Confirmation = &choice
 	return member, nil
+}
+
+// AcceptedInputs selects respondents, independent of current group membership.
+// Queries read at most one extra member/interval beyond the domain limits, so
+// exceeding capacity is reported instead of truncating input or unbounded reads.
+func (s *outingStore) AcceptedInputs(ctx context.Context, id outing.ID) ([]outing.ParticipantInput, error) {
+	decisions, err := s.q.ReadAcceptedDecisions(ctx, int64(id))
+	if err != nil {
+		return nil, err
+	}
+	if len(decisions) > outing.MaxAggregationMembers {
+		return nil, outing.ErrAggregationCapacity
+	}
+	result := make([]outing.ParticipantInput, 0, len(decisions))
+	for _, decision := range decisions {
+		if !decision.MaxBudgetFen.Valid || !decision.RequiresWheelchairAccess.Valid {
+			return nil, outing.ErrAggregationInput
+		}
+		intervals, err := s.q.ReadDecisionAvailability(ctx, generated.ReadDecisionAvailabilityParams{OutingID: int64(id), MemberID: decision.MemberID})
+		if err != nil {
+			return nil, err
+		}
+		if len(intervals) > 256 {
+			return nil, outing.ErrAggregationCapacity
+		}
+		input := outing.MemberInput{MaxBudgetFen: decision.MaxBudgetFen.Int64, RequiresWheelchairAccess: decision.RequiresWheelchairAccess.Bool, Availability: make([]outing.Availability, 0, len(intervals))}
+		for _, interval := range intervals {
+			if !interval.Date.Valid || interval.Date.InfinityModifier != pgtype.Finite {
+				return nil, outing.ErrAggregationInput
+			}
+			input.Availability = append(input.Availability, outing.Availability{Date: outing.Date(interval.Date.Time.Format(time.DateOnly)), StartMinute: int(interval.StartMinute), EndMinute: int(interval.EndMinute)})
+		}
+		result = append(result, outing.ParticipantInput{MemberID: users.ID(decision.MemberID), Input: input})
+	}
+	return result, nil
 }
 
 // SavePlan replaces candidate dates without deleting stale member availability.

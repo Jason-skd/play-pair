@@ -73,3 +73,9 @@ SELECT member_id,phase,status FROM summaries
 WHERE (@phase_filter::text='' OR phase= @phase_filter) AND (@status_filter::text='' OR status= @status_filter)
 AND (member_id,phase)>(@after_member::bigint,@after_phase::text)
 ORDER BY member_id,phase LIMIT @page_limit;
+-- name: ReadAcceptedDecisions :many
+SELECT * FROM outing_decisions WHERE outing_id= @outing_id AND choice='accept'
+ORDER BY member_id LIMIT 129;
+-- name: ReadDecisionAvailability :many
+SELECT * FROM outing_availability WHERE outing_id= @outing_id AND member_id= @member_id
+ORDER BY date,start_minute LIMIT 257;
