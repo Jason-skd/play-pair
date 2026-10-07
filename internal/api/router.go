@@ -70,6 +70,7 @@ func New(check HealthCheck, timeout time.Duration, logger *slog.Logger, services
 	outings.PUT("/:outingId", wrapper.UpdateOuting)
 	outings.GET("/:outingId/responses", wrapper.ListOutingResponses)
 	outings.GET("/:outingId/members/:memberId", wrapper.GetOutingMember)
+	outings.GET("/:outingId/decision-inputs", wrapper.GetDecisionInputs)
 	outings.PUT("/:outingId/responses/decision", wrapper.RespondDecision)
 	outings.PUT("/:outingId/responses/confirmation", wrapper.RespondConfirmation)
 	outings.POST("/:outingId/arrangement", wrapper.CreateArrangement)

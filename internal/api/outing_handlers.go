@@ -412,6 +412,14 @@ func outingMember(detail outing.Detail) generated.OutingMember {
 }
 func (s *server) outingFailure(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, outing.ErrNoParticipants):
+		writeError(c, http.StatusConflict, generated.NoParticipants, "No accepted member inputs")
+	case errors.Is(err, outing.ErrNoCommonTime):
+		writeError(c, http.StatusConflict, generated.NoCommonTime, "No common time fits the current duration")
+	case errors.Is(err, outing.ErrAggregationCapacity):
+		writeError(c, http.StatusUnprocessableEntity, generated.AggregationCapacityExceeded, "Decision input capacity exceeded")
+	case errors.Is(err, outing.ErrAggregationInput):
+		writeError(c, http.StatusUnprocessableEntity, generated.AggregationInputInvalid, "Stored decision input cannot be computed")
 	case errors.Is(err, outing.ErrInvalidInput):
 		writeError(c, http.StatusBadRequest, generated.InvalidInput, "Invalid input")
 	case errors.Is(err, outing.ErrInvalidAvailability):

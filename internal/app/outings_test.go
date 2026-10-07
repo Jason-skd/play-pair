@@ -131,10 +131,20 @@ func TestOutingsApplication(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := fmt.Sprintf("/api/v1/outings/%d", o.Id)
+	request(0, "GET", path+"/decision-inputs", nil, 409)
 	request(1, "PUT", path+"/responses/decision", map[string]any{"choice": "accept", "input": map[string]any{"maxBudgetFen": 0, "requiresWheelchairAccess": false, "availability": []any{map[string]string{"date": date, "startTime": "10:00", "endTime": "12:00"}}}}, 204)
 	request(1, "GET", fmt.Sprintf("%s/members/%d", path, ids[0]), nil, 403)
 	request(0, "GET", fmt.Sprintf("%s/members/%d", path, ids[1]), nil, 200)
+	request(1, "GET", path+"/decision-inputs", nil, 403)
+	var aggregation generated.DecisionInputs
+	if err := json.Unmarshal(request(0, "GET", path+"/decision-inputs", nil, 200), &aggregation); err != nil {
+		t.Fatal(err)
+	}
+	if aggregation.MaxBudgetFen != 0 || len(aggregation.CommonWindows) != 1 || aggregation.CommonWindows[0].StartsAt.Format(time.DateOnly) != date || aggregation.CommonWindows[0].EndsAt.Sub(aggregation.CommonWindows[0].StartsAt) != 2*time.Hour || len(aggregation.Constraints) != 3 || len(aggregation.Constraints[0].Sources) != 1 || aggregation.Constraints[0].Sources[0].MemberId != ids[1] {
+		t.Fatal(aggregation)
+	}
 	request(0, "PUT", path, map[string]any{"dates": []string{time.Now().UTC().AddDate(0, 0, 8).Format(time.DateOnly)}, "durationMinutes": 60}, 204)
+	request(0, "GET", path+"/decision-inputs", nil, 409)
 	data := request(1, "GET", path, nil, 200)
 	if !strings.Contains(string(data), "date_outside_plan") {
 		t.Fatal(string(data))
@@ -142,6 +152,7 @@ func TestOutingsApplication(t *testing.T) {
 	start := time.Now().UTC().AddDate(0, 0, 7).Truncate(time.Hour)
 	arrangement := map[string]any{"startsAt": start, "endsAt": start.Add(time.Hour), "place": "Park", "activity": "Walk"}
 	request(0, "POST", path+"/arrangement", arrangement, 201)
+	request(0, "GET", path+"/decision-inputs", nil, 409)
 	request(1, "PUT", path+"/responses/confirmation", map[string]string{"choice": "accept"}, 204)
 	arrangement["resetResponses"] = true
 	request(0, "PUT", path+"/arrangement", arrangement, 204)

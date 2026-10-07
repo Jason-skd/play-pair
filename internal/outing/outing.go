@@ -180,6 +180,7 @@ type Store interface {
 	LockOuting(context.Context, ID) error
 	Membership(context.Context, Outing, users.ID) (Membership, error)
 	Member(context.Context, ID, users.ID) (Member, error)
+	AcceptedInputs(context.Context, ID) ([]ParticipantInput, error)
 	SavePlan(context.Context, ID, Plan) error
 	SaveDecision(context.Context, ID, users.ID, Choice, *MemberInput) error
 	SaveConfirmation(context.Context, ID, users.ID, Choice) error

@@ -297,6 +297,37 @@ func (q *Queries) OutingMembership(ctx context.Context, arg OutingMembershipPara
 	return i, err
 }
 
+const readAcceptedDecisions = `-- name: ReadAcceptedDecisions :many
+SELECT outing_id, member_id, choice, max_budget_fen, requires_wheelchair_access FROM outing_decisions WHERE outing_id= $1 AND choice='accept'
+ORDER BY member_id LIMIT 129
+`
+
+func (q *Queries) ReadAcceptedDecisions(ctx context.Context, outingID int64) ([]OutingDecision, error) {
+	rows, err := q.db.Query(ctx, readAcceptedDecisions, outingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OutingDecision
+	for rows.Next() {
+		var i OutingDecision
+		if err := rows.Scan(
+			&i.OutingID,
+			&i.MemberID,
+			&i.Choice,
+			&i.MaxBudgetFen,
+			&i.RequiresWheelchairAccess,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const readArrangement = `-- name: ReadArrangement :one
 SELECT outing_id, starts_at, ends_at, place, activity FROM outing_arrangements WHERE outing_id= $1
 `
@@ -385,6 +416,42 @@ func (q *Queries) ReadDecision(ctx context.Context, arg ReadDecisionParams) (Out
 		&i.RequiresWheelchairAccess,
 	)
 	return i, err
+}
+
+const readDecisionAvailability = `-- name: ReadDecisionAvailability :many
+SELECT outing_id, member_id, date, start_minute, end_minute FROM outing_availability WHERE outing_id= $1 AND member_id= $2
+ORDER BY date,start_minute LIMIT 257
+`
+
+type ReadDecisionAvailabilityParams struct {
+	OutingID int64
+	MemberID int64
+}
+
+func (q *Queries) ReadDecisionAvailability(ctx context.Context, arg ReadDecisionAvailabilityParams) ([]OutingAvailability, error) {
+	rows, err := q.db.Query(ctx, readDecisionAvailability, arg.OutingID, arg.MemberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OutingAvailability
+	for rows.Next() {
+		var i OutingAvailability
+		if err := rows.Scan(
+			&i.OutingID,
+			&i.MemberID,
+			&i.Date,
+			&i.StartMinute,
+			&i.EndMinute,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const readOuting = `-- name: ReadOuting :one

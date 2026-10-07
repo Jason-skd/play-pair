@@ -13,29 +13,64 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for ConstraintSourceField.
+const (
+	Availability             ConstraintSourceField = "availability"
+	Dates                    ConstraintSourceField = "dates"
+	DurationMinutes          ConstraintSourceField = "durationMinutes"
+	MaxBudgetFen             ConstraintSourceField = "maxBudgetFen"
+	RequiresWheelchairAccess ConstraintSourceField = "requiresWheelchairAccess"
+)
+
+// Valid indicates whether the value is a known member of the ConstraintSourceField enum.
+func (e ConstraintSourceField) Valid() bool {
+	switch e {
+	case Availability:
+		return true
+	case Dates:
+		return true
+	case DurationMinutes:
+		return true
+	case MaxBudgetFen:
+		return true
+	case RequiresWheelchairAccess:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorResponseErrorCode.
 const (
-	CsrfRejected          ErrorResponseErrorCode = "csrf_rejected"
-	DependencyUnavailable ErrorResponseErrorCode = "dependency_unavailable"
-	EmailConflict         ErrorResponseErrorCode = "email_conflict"
-	Forbidden             ErrorResponseErrorCode = "forbidden"
-	IdempotencyConflict   ErrorResponseErrorCode = "idempotency_conflict"
-	InternalError         ErrorResponseErrorCode = "internal_error"
-	InvalidAvailability   ErrorResponseErrorCode = "invalid_availability"
-	InvalidCredentials    ErrorResponseErrorCode = "invalid_credentials"
-	InvalidInput          ErrorResponseErrorCode = "invalid_input"
-	MethodNotAllowed      ErrorResponseErrorCode = "method_not_allowed"
-	NotFound              ErrorResponseErrorCode = "not_found"
-	OutingArchived        ErrorResponseErrorCode = "outing_archived"
-	PhaseConflict         ErrorResponseErrorCode = "phase_conflict"
-	RateLimited           ErrorResponseErrorCode = "rate_limited"
-	Unauthenticated       ErrorResponseErrorCode = "unauthenticated"
-	VersionConflict       ErrorResponseErrorCode = "version_conflict"
+	AggregationCapacityExceeded ErrorResponseErrorCode = "aggregation_capacity_exceeded"
+	AggregationInputInvalid     ErrorResponseErrorCode = "aggregation_input_invalid"
+	CsrfRejected                ErrorResponseErrorCode = "csrf_rejected"
+	DependencyUnavailable       ErrorResponseErrorCode = "dependency_unavailable"
+	EmailConflict               ErrorResponseErrorCode = "email_conflict"
+	Forbidden                   ErrorResponseErrorCode = "forbidden"
+	IdempotencyConflict         ErrorResponseErrorCode = "idempotency_conflict"
+	InternalError               ErrorResponseErrorCode = "internal_error"
+	InvalidAvailability         ErrorResponseErrorCode = "invalid_availability"
+	InvalidCredentials          ErrorResponseErrorCode = "invalid_credentials"
+	InvalidInput                ErrorResponseErrorCode = "invalid_input"
+	MethodNotAllowed            ErrorResponseErrorCode = "method_not_allowed"
+	NoCommonTime                ErrorResponseErrorCode = "no_common_time"
+	NoParticipants              ErrorResponseErrorCode = "no_participants"
+	NotFound                    ErrorResponseErrorCode = "not_found"
+	OutingArchived              ErrorResponseErrorCode = "outing_archived"
+	PhaseConflict               ErrorResponseErrorCode = "phase_conflict"
+	RateLimited                 ErrorResponseErrorCode = "rate_limited"
+	Unauthenticated             ErrorResponseErrorCode = "unauthenticated"
+	VersionConflict             ErrorResponseErrorCode = "version_conflict"
 )
 
 // Valid indicates whether the value is a known member of the ErrorResponseErrorCode enum.
 func (e ErrorResponseErrorCode) Valid() bool {
 	switch e {
+	case AggregationCapacityExceeded:
+		return true
+	case AggregationInputInvalid:
+		return true
 	case CsrfRejected:
 		return true
 	case DependencyUnavailable:
@@ -55,6 +90,10 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	case InvalidInput:
 		return true
 	case MethodNotAllowed:
+		return true
+	case NoCommonTime:
+		return true
+	case NoParticipants:
 		return true
 	case NotFound:
 		return true
@@ -85,6 +124,51 @@ func (e GroupMemberRole) Valid() bool {
 	case Initiator:
 		return true
 	case Member:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HardConstraintScope.
+const (
+	PerPersonWholeOuting HardConstraintScope = "per_person_whole_outing"
+	Schedule             HardConstraintScope = "schedule"
+	Venue                HardConstraintScope = "venue"
+)
+
+// Valid indicates whether the value is a known member of the HardConstraintScope enum.
+func (e HardConstraintScope) Valid() bool {
+	switch e {
+	case PerPersonWholeOuting:
+		return true
+	case Schedule:
+		return true
+	case Venue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HardConstraintType.
+const (
+	Budget           HardConstraintType = "budget"
+	CommonTime       HardConstraintType = "common_time"
+	Duration         HardConstraintType = "duration"
+	WheelchairAccess HardConstraintType = "wheelchair_access"
+)
+
+// Valid indicates whether the value is a known member of the HardConstraintType enum.
+func (e HardConstraintType) Valid() bool {
+	switch e {
+	case Budget:
+		return true
+	case CommonTime:
+		return true
+	case Duration:
+		return true
+	case WheelchairAccess:
 		return true
 	default:
 		return false
@@ -473,6 +557,17 @@ type ConfirmationRequest struct {
 	Choice OutingChoice `json:"choice"`
 }
 
+// ConstraintSource defines model for ConstraintSource.
+type ConstraintSource struct {
+	Field ConstraintSourceField `json:"field"`
+
+	// MemberId Zero denotes the outing plan; positive IDs denote member input.
+	MemberId int64 `json:"memberId"`
+}
+
+// ConstraintSourceField defines model for ConstraintSource.Field.
+type ConstraintSourceField string
+
 // CreateGroupRequest defines model for CreateGroupRequest.
 type CreateGroupRequest struct {
 	// Name Trim surrounding Unicode whitespace; reject NUL and invalid UTF-8.
@@ -484,6 +579,17 @@ type CreateOutingRequest struct {
 	Dates           []openapi_types.Date `json:"dates"`
 	DurationMinutes int                  `json:"durationMinutes"`
 	Timezone        string               `json:"timezone"`
+}
+
+// DecisionInputs defines model for DecisionInputs.
+type DecisionInputs struct {
+	CommonWindows            []TimeWindow     `json:"commonWindows"`
+	Constraints              []HardConstraint `json:"constraints"`
+	DurationMinutes          int              `json:"durationMinutes"`
+	MaxBudgetFen             int64            `json:"maxBudgetFen"`
+	OutingId                 int64            `json:"outingId"`
+	RequiresWheelchairAccess bool             `json:"requiresWheelchairAccess"`
+	Timezone                 string           `json:"timezone"`
 }
 
 // DecisionRequest defines model for DecisionRequest.
@@ -539,6 +645,23 @@ type GroupMemberPage struct {
 	// NextAfterMemberId Exclusive cursor; null when there is no next page.
 	NextAfterMemberId *int64 `json:"nextAfterMemberId"`
 }
+
+// HardConstraint Type selects the sole parameter: budget uses maxBudgetFen, common_time uses windows, duration uses durationMinutes, wheelchair_access requires accessible venue and has no additional parameter. All constraints need exactly one satisfied/violated/unknown answer with evidence or reason in Go ValidateProposal. Missing/duplicate/unknown IDs or invalid statuses are contract errors. Go rechecks structured facts; unknown facts stay pending and known violations reject the proposal. Accepted proposals promise no identified conflict, with pending conditions requiring confirmation. No arrangement is written.
+type HardConstraint struct {
+	ConstraintId    string              `json:"constraintId"`
+	DurationMinutes *int                `json:"durationMinutes,omitempty"`
+	MaxBudgetFen    *int64              `json:"maxBudgetFen,omitempty"`
+	Scope           HardConstraintScope `json:"scope"`
+	Sources         []ConstraintSource  `json:"sources"`
+	Type            HardConstraintType  `json:"type"`
+	Windows         *[]TimeWindow       `json:"windows,omitempty"`
+}
+
+// HardConstraintScope defines model for HardConstraint.Scope.
+type HardConstraintScope string
+
+// HardConstraintType defines model for HardConstraint.Type.
+type HardConstraintType string
 
 // HardDefaults Optional defaults only; saving does not authorize any outing. Currency is CNY, measured in fen.
 type HardDefaults struct {
@@ -687,6 +810,12 @@ type SoftPreferences struct {
 	Dislikes string `json:"dislikes"`
 	Likes    string `json:"likes"`
 	Neutral  string `json:"neutral"`
+}
+
+// TimeWindow defines model for TimeWindow.
+type TimeWindow struct {
+	EndsAt   time.Time `json:"endsAt"`
+	StartsAt time.Time `json:"startsAt"`
 }
 
 // UpdateArrangement defines model for UpdateArrangement.
@@ -948,6 +1077,9 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/outings/{outingId}/arrangement)
 	UpdateArrangement(c *gin.Context, outingId int64, params UpdateArrangementParams)
+
+	// (GET /api/v1/outings/{outingId}/decision-inputs)
+	GetDecisionInputs(c *gin.Context, outingId int64)
 
 	// (GET /api/v1/outings/{outingId}/members/{memberId})
 	GetOutingMember(c *gin.Context, outingId int64, memberId int64)
@@ -1584,6 +1716,31 @@ func (siw *ServerInterfaceWrapper) UpdateArrangement(c *gin.Context) {
 	siw.Handler.UpdateArrangement(c, outingId, params)
 }
 
+// GetDecisionInputs operation middleware
+func (siw *ServerInterfaceWrapper) GetDecisionInputs(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "outingId" -------------
+	var outingId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "outingId", c.Param("outingId"), &outingId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter outingId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetDecisionInputs(c, outingId)
+}
+
 // GetOutingMember operation middleware
 func (siw *ServerInterfaceWrapper) GetOutingMember(c *gin.Context) {
 
@@ -1951,6 +2108,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/api/v1/outings", wrapper.ListOutings)
 	router.GET(options.BaseURL+"/api/v1/outings/:outingId", wrapper.GetOuting)
 	router.PUT(options.BaseURL+"/api/v1/outings/:outingId", wrapper.UpdateOuting)
+	router.GET(options.BaseURL+"/api/v1/outings/:outingId/decision-inputs", wrapper.GetDecisionInputs)
 	router.GET(options.BaseURL+"/api/v1/outings/:outingId/responses", wrapper.ListOutingResponses)
 	router.GET(options.BaseURL+"/api/v1/outings/:outingId/members/:memberId", wrapper.GetOutingMember)
 	router.PUT(options.BaseURL+"/api/v1/outings/:outingId/responses/decision", wrapper.RespondDecision)
